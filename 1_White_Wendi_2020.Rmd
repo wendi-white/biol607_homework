@@ -1,0 +1,60 @@
+---
+title: 'Homework 1: Intro to R!'
+author: "Wendi White"
+date: "9/11/2020"
+output:
+  html_document: default
+---
+
+
+1. Load quakes with data(quakes). Show what’s there with str() and summary().
+
+```{r}
+data(quakes)
+str(quakes)
+summary(quakes)
+```
+
+
+2. Show the entirity of the column long.
+```{r}
+quakes$long
+```
+
+3. Hey, another useful function - unique()! Apply it to a vector, and you can see what are all of the unique values. It’s great for really digging into a problematic vector. What unique stations are there? 
+```{r}
+unique(quakes$stations)
+```
+
+
+4. Use length() with unique() to determine how many stations there are.
+
+```{r}
+length(unique(quakes$stations))
+```
+5. Using range(), what is the range of depths where quakes occur?
+```{r}
+range(quakes$depth)
+```
+E.C. Where was the earthquake of largest magnitude found? You’ll need to use some comparisons and the max() function for this in your indices instead of a number!
+
+```{r}
+max(quakes$mag, na.rm = FALSE)
+which(quakes$mag== 6.4)
+quakes[152,]
+```
+
+
+
+
+
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
