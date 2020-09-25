@@ -1,0 +1,213 @@
+---
+title: 'Homework 2: Sampling and Iteration in the Tidyverse'
+author: "Wendi White"
+date: "9/20/2020"
+output: html_document
+---
+
+1. Some Data with Flippers
+
+1a. Load the library palmerpenguins after installing it.
+```{r}
+#removed install R code b/c couldn't knit file but did put install.packages("palmerpenguins")
+library("palmerpenguins") #load in the library
+```
+
+1b. Show the head of the dataset penguins
+```{r}
+head(penguins) #head() to look at first 6 rows of data set
+```
+
+1c. What do you learn by using str() and summary() on penguins()
+
+Str tells us that we have 8 categories in our data set and I can get a glimpse at the fact we have NA's. Summary we learn there how many NA's in our data set so we'll need to use code na.rm= TRUE for future codes.
+```{r}
+str(penguins) #str data
+summary(penguins) #summarize to get more info on data like NA's mean, med, etc of each column
+```
+
+
+1d. What are the quantiles of bill depth across the whole data set? What do those quantiles mean?
+
+The quantiles tell us what values fall below certain % of our data. Most common is knowing the median (17.3) of our data to determine the value where 50% of numbers will fall above and below. 0% of number fall below 13.1, 25% of numbers fall below 15.6, 50% of numbers fall below (and above) 17.3, 75% of numbers fall below 18.7, and 100% of numbers fall below 21.5. 13.1 is min, 17.3 is median, and 21.5 is max.
+```{r}
+quantile(penguins$bill_depth_mm, na.rm = TRUE) #use quantile() function to find the quantiles of bill depth. excludes NAs
+```
+
+2. What’s here? Let’s use dplyr!
+
+2a. If I have a vector, c(1,4,7,NA,9), what is its mean? Note, the NA is going to cause a problem. Look at ?mean to learn how to solve it.
+
+Mean = 5.25
+```{r}
+library(dplyr) #attach dplyr
+vec_two <- c(1,4,7,NA,9) #name/create the vector
+mean(vec_two, na.rm = TRUE) #find mean of vector but note NAs and eliminate them
+```
+
+2b. What is the mean, sd, and median of body mass across the data set? Note, these NAs are going to cause some problems, so you might need to look at the documentation for the relevant functions.
+
+mean= 4201.754
+sd= 801.9545
+median= 4050 
+```{r}
+mean(penguins$body_mass_g, na.rm = TRUE) #find mean, ignore NAs
+sd(penguins$body_mass_g, na.rm=TRUE) #find sd, ignore NAs
+median(penguins$body_mass_g, na.rm = TRUE) #find median, ignore NAs
+```
+
+2c. Repeat 2b, but, show us how these quantities differ by species
+
+```{r}
+library(dplyr)
+peng_msm <- penguins%>% #new name and using data penguins
+   group_by(species)%>% #group by species
+  summarize(avg_bm = mean(body_mass_g, na.rm = TRUE), #summarize to find sd, mean and median of body mass
+            sd_bm = sd(body_mass_g, na.rm=TRUE),
+            med_bm = median(body_mass_g, na.rm = TRUE))
+
+peng_msm
+```
+
+2d. Repeat 2c, but just for Biscoe island. What is different in the results?
+
+There are no Chinstraps on the island and Gentoo's are only found on Biscoe island b/c none of the values change. Adelie values change a bit b/c they must be found on other islands too.
+```{r}
+peng_msm_biscoe <- penguins%>% #new name/ data set pulling from
+  filter(island=="Biscoe")%>% #filter for just biscoe
+  group_by(species)%>% #group by species
+  summarize(avg_bm_bis = mean(body_mass_g, na.rm = TRUE), #summarize to get avg, sd and median of body mass
+            sd_bm_bis = sd(body_mass_g, na.rm=TRUE),
+            med_bm_bis = median(body_mass_g, na.rm = TRUE))
+
+peng_msm_biscoe 
+```
+
+2E Make a species-island column in penguins using paste(). This is an awesome function that takes multiple strings, and slams them together using the argument sep = to define how the string should be combined. Try out paste("Hello", "Goodbye", sep = "! ") to see how it works. Have the two be separated by _.
+```{r}
+paste("Hello", "Goodbye", sep = "!") #paste attempt, use "" b/c words 
+?paste #look into paste function
+library(dplyr) #load dplyr
+species_island_peng <- penguins%>% #new name for data, pull data from penguins data set
+  mutate("species_island" = paste(species, island, sep = "_")) #add in column using mutate. call it species_island. species island combines columns species and island 
+species_island_peng #view data
+```
+
+3. A Little Light Plotting
+3a. Show the distribution of flipper_length_mm by species and island using boxplots. For one point of extra credit, redo creating the species_island column with the sep as \n instead of _. What does \n do? You will find it very handy in the future.
+
+\n gives you a new line (return). From what I saw it is good for addresses!
+
+```{r}
+boxplot(flipper_length_mm ~ species_island_peng$species_island, data = species_island_peng) #box plot of flipper length (y) by species_island (x) using function created above species_island
+
+species_island_peng_ec <- penguins%>% #new name for data, pull data from penguins data set
+  mutate("species_islands" =  (paste(species, island, sep = '\n'))) #mutate to add column and call it species_islands. Use \n to separate though when you add in function cat(paste( , sep='\n')) 
+
+species_island_peng_ec_cat <- penguins%>% #new name for data, pull data from penguins data set
+  mutate("species_islands" =  cat(paste(species, island, sep = '\n')))
+```
+
+3b. Show the relationship between average flipper length and average body mass by species and island. What do you see?
+
+You can see there is a big gap in data where the 5100g looks like an outlier 
+```{r}
+peng_afl_abm <- species_island_peng%>% #new name for plot, using data that has new species_island column
+  group_by(species_island)%>% #group by this column
+  summarize(avg_flip=mean(flipper_length_mm, na.rm = TRUE), avg_body= mean(body_mass_g, na.rm = TRUE))%>% #looking at avg flipper length vs avg body mass
+ plot(avg_flip~avg_body, data= .) # plot the flip vs body
+peng_afl_abm #view graph
+```
+
+3c. Interesting. What if you had made the same plot with the whole dataset? What do you see? Is there anything that could clarify the result any more? Think about it - lots of possible right answers here.
+
+By plotting all of the data on graph one we see that our average of everything is way different because of the big bird that's pulling our average up.
+```{r}
+peng_afl_ <- species_island_peng%>% #new name for plot, using data that has new species_island column
+  summarize(avg_flip=mean(flipper_length_mm, na.rm = TRUE), avg_body= mean(body_mass_g, na.rm = TRUE))%>% #looking at avg flipper length vs avg body mass
+ plot(avg_flip~avg_body, data= .) # plot the flip vs body
+peng_afl_ #view graph
+
+
+
+
+plot(flipper_length_mm~body_mass_g, data = species_island_peng) # new plot without averages and no species by island just to further look at the data
+```
+
+4. Let’s get ready to simulate
+
+4a. Grab the values for bill_length_mm for Gentoo penguins in Biscoe Island and put it into an object. Note, the dplyr function pull() is kinda cool, as if you apply it to a data frame, it will pull out a vector from a column of interest. Try 21, 21, 22.8, 21.4, 18.7, 18.1, 14.3, 24.4, 22.8, 19.2, 17.8, 16.4, 17.3, 15.2, 10.4, 10.4, 14.7, 32.4, 30.4, 33.9, 21.5, 15.5, 15.2, 13.3, 19.2, 27.3, 26, 30.4, 15.8, 19.7, 15, 21.4. Kinda cool. Might help you here.
+```{r}
+library(dplyr)
+bill <- penguins%>% #new name for object
+  filter(species=="Gentoo", island=="Biscoe")%>% #filter so you get gentoos on biscoe island
+  select(bill_length_mm)%>% #selet for just bill length
+  pull() #pull out this data
+bill #note NA
+```
+
+4b. Use replicate() to calculate the standard error of the mean 10 times. Use a formula! Don’t forget that NA values shouldn’t be included!
+
+se= 0.276759
+
+```{r}
+str(bill, na.rm=TRUE) #str to check for NA's and find length of data set(124)
+replicate(10, (sd(bill, na.rm = TRUE) / sqrt(124)))  #replicate to calc se 10 times ( n=10). Used equation sd / sqrt (length of data set)
+```
+
+4c. Use map_df() to create a data frame with the mean and sd of different sample sizes using the first 5 through 100 values (so, n = 5:100 - smallest sample size will have the values 1-5). Make sure the sample size is included in the final data frame.
+```{r}
+library(purrr) #load purr for map_df
+
+?map_df
+df_new <- map_df(5:100, ~data.frame(m= mean(bill[1:.x]), #map_df to create data frame. for values 5-100. We are asking it to return two things the mean (m) and sd (s). using indicies from our vector 1- the chosen number (.x)
+                           s= sd(bill[1:.x])),
+         .id = "x") #to retain the value (1-96 column)
+df_new
+```
+
+4d. Plot the relationship between sample size and SD and sample size versus SE of the mean. What difference do you see and why? Note, you’ll need to create a column for SE here!
+
+They graphs look like inverses of each other and this is because the SE is the SD of the estimate of our SD. So when SD is high our SE will be low because there will be less variability. AKA when sample size is high the SD is large which means that our SE will be low.
+
+```{r}
+plot(df_new$x, df_new$s) #plot of sample size vs SD
+df_new_se <- map_df(5:100, ~data.frame(m= mean(bill[1:.x]), #create SE by copying data from above and adding se in with same explanation other than I added in the equation of SE
+                           s= sd(bill[1:.x]),
+                           se= (sd(bill[1:.x]))/sqrt(96)),
+         .id = "x")
+df_new_se 
+plot(df_new_se$x, df_new_se$se) #plotting the sample size vs SE
+```
+
++2 EC for using par() to make a two-panel plot. Don’t forget to reset back to a single plot per panel after making a two-panel plot. Otherwise things get weird.
+```{r}
+par(plot(df_new$x, df_new$s),plot(df_new$x, df_new_se$se)) #use par and write out the two plots from above
+```
+
+Extra Credit.
+Making beautiful tables is hard. There are a number of good packages to help you do that - and they were recently featured in this excellent article - https://rfortherestofus.com/2019/11/how-to-make-beautiful-tables-in-r/. Make a beautiful table showing the average properties of bills of penguins by species, sex, and island. Use whatever package you like. A basic nice table is worth 4 points. +1 for every additional bit of information you can convey with the table other than a nicely formatted table. Please explain what you have done to get each point. +1 for naturally incorporating each additional piece of information about properties beyond means. How visually appealing can you make this?
+```{r}
+library(gt)
+library(tidyverse)
+
+
+
+
+penguins_table <-  penguins%>%
+  group_by(species,sex, island)%>% #load in data group by species, sex, island
+   summarize(avg_bill_length=mean(bill_length_mm, na.rm = TRUE), avg_bill_depth= mean(bill_depth_mm, na.rm = TRUE))%>% #summarize to get avg
+  mutate("species_islands_sex" =  paste(species, island, sex, sep = '_'))%>% #mashe the column together to be species island and sex
+  select(species_islands_sex, avg_bill_length, avg_bill_depth) #select for the new three columns
+  
+penguins_table%>% gt() #view data
+
+tab <- penguins_table%>% 
+  gt(rowname_col = "species_islands_sex")%>% #make species_islands_sex the col name
+  tab_header("Average bill properties of penguins")%>% #name the chart
+  tab_options(column_labels.background.color = "grey") # make the row header grey
+tab #view
+
+
+```
+
