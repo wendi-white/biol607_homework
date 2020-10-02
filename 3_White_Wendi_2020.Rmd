@@ -1,0 +1,220 @@
+---
+title: "Homework_3_Sims_Viz"
+author: "Wendi White"
+date: "9/27/2020"
+output: html_document
+---
+
+github: 
+
+```{r}
+#libraries
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(forcats)
+library(colorfindr)
+```
+
+1. Sample Properties
+Consider the following vasopressin levels in voles.
+
+```{r}
+vole_vaso <- c(98,96,94,88,86,82,77,74,70,60, #load in the vector and name it
+           59,52,50,47,40,35,29,13,6,5)
+```
+
+1a. Say “Vole vasopressin” 10 times as fast as you can. How many times did you trip up?
+
+Nailed it. 10/10
+
+1b. What is the mean, median, sd, and interquartile range of the sample?
+
+mean= 58.05
+median= 59.5
+sd= 29.75244
+IQR= 44.25
+
+```{r}
+mean(vole_vaso)
+median(vole_vaso)
+sd(vole_vaso)
+IQR(vole_vaso)
+```
+
+1c. What is the standard error of the mean (do this with a formula!)?
+
+6.652849 
+
+```{r}
+sd(vole_vaso)/ sqrt(length(vole_vaso))#se forumla is sd/sqrt (n)
+```
+
+1d. What does the standard error of the mean tell you about our estimate of the mean values of the population of vole vassopressin?
+
+It tells us our estimate of the mean is variable by 6.65. AKA 58.05+/- 6.65. I'd say this isn't great and there's an okay amount of error.
+
+2. Sample Size for upper quartiles. We can get the upper quartile value of vole vassopressin with quantile(vole_vaso, probs = 0.75). Let’s assume the sample is representative of the popultion.
+
+```{r}
+vole_quan <- quantile(vole_vaso, probs = 0.75) #code from question gives us upper quartile value
+```
+
+2a. Use sample() to get just one resample with a sample size of 10. What is its upper quartile?
+
+Upper quartile is 88
+
+```{r}
+set.seed(93) #get repeat number (mostly for my own sanity)
+quart_up <- vole_vaso %>% #call in vole vaso data
+  sample(vole_vaso, size = 10, replace = TRUE)#sample vole vaso 10 times
+quart_up
+
+quantile(quart_up, probs = 0.75) #find upper quantile range
+```
+
+2b. Build an initial data frame for simulations with the sample sizes 5 through 20.
+
+```{r}
+vole_sim <- data.frame(samp_size=5:20) #build data frame for sample size of 5-20
+```
+
+2c. Use this data frame to get simulated upper quartiles for each sample size. using 1,000 simulations
+
+```{r}
+samp_sim_one_replicate <- vole_sim%>% #create new data frame from our new data frame
+  rowwise(samp_size)%>% #look at it row by row
+  summarize(samp_vole= replicate(1000, #summarize the data so it ungroups at the end and replicate it 1000 times
+                        quantile(sample(vole_vaso, #get the quantile of our sample which is vole vaso and we'll replace our samples
+                                        samp_size, 
+                                        replace = TRUE), 
+                                 probs=0.75))) #get the upper quartile 
+```
+
+2d. With a ggplot, make a guesstimate as to the best sample size for estimating the upper quartile of the population. Use whatever geom you feel makes things most easy to see. E.C. Add a red dashed line using geom_vline() or geom_hline() to show where that should be, perhaps.
+
+Picked 14 as sample size b/c it starts to level off after this. I think there are fewer samples at 13 so I picked 14 to error on the side of caution. If I had more time/supplies though I'd be really safe and do 15 and I guess if I had very little money and I really had to pick the minimum I'd do 13.
+
+```{r}
+ggplot(data= samp_sim_one_replicate, #pull out data from last question
+       mapping = aes(x= samp_size, #plot samp size vs vole bootstrap 
+                     y=samp_vole))+
+  geom_point()+ #used geom pont b/c easy to look at for me
+  geom_vline(xintercept = 14, linetype= "dotted", colour="red") #created a line at 14 b/c I felt like this was what the sample size should be. Made line dotted and red with the arguments supplied
+
+```
+
+2e. Plot the SE of the estimate of the upper quantile by sample size. Again, what it the best way to see this? Does it level off? Is there a level you feel acceptable? Justify your answer. Does this match with what you put in 2d?
+
+I still think the best way to view this is with geom_point. I still picked 14 b/c of same reasons as above (leveling off/ high number of samples that work with 14 sample size).
+
+```{r}
+ggplot(data= samp_sim_one_replicate, #pull out data from last question
+       mapping = aes(x= samp_size, #plot samp size vs vole bootstrap 
+                     y= (sd(samp_vole)/sqrt(samp_vole)))) + #se equation
+  geom_point()+ #helps to look at samples this way
+  geom_vline(xintercept = 14, linetype= "dotted", colour="red") #did 14 again b/c of leveling off
+```
+
+3. Ggplot
+A little while back, Dave Curran using some of the code I’d posted from a previous 607 lab made a wonderful animation of change in arctic sea ice.
+
+He used data from
+
+ftp://sidads.colorado.edu/DATASETS/NOAA/G02135/north/daily/data/NH_seaice_extent_final_v2.csv ftp://sidads.colorado.edu/DATASETS/NOAA/G02135/north/daily/data/NH_seaice_extent_nrt_v2.csv
+
+I’m providing you with a cleaned form of his data (his code is here) for you to work with in a few plots. The data file is called NH_seaice_extent_monthly_1978_2016.csv
+
+3a. Some setup. Run the code below. For extra credit, look up the packages and functions used and explain what is going on here. But, that’s EC.
+
+```{r}
+theme_set(theme_bw(base_size=12)) #setting the theme for all future plots so we are using the classic dark on light theme with the base font size being 12 pts
+
+ice2 <- read_csv("http://biol607.github.io/homework/data/NH_seaice_extent_monthly_1978_2016.csv") %>% #call in the csv data set that Jarrett has cleaned up for us
+  mutate(Month_Name = factor(Month_Name), #add column to data frame called Month_Name
+         Month_Name = fct_reorder(Month_Name, Month))  #makes the output be ordered on the basis of Month
+```
+
+3b. Make a boxplot showing the variability in sea ice extent every month.
+
+```{r}
+boxplot(ice2$Extent~ice2$Month_Name) #how sea ice extent varies over by month (limitation this does eliminate the by year variation)
+```
+
+3c. Use dplyr to get the annual minimum sea ice extent. Plot minimum ice by year. What do you observe?
+
+As time goes on you can see the minimum amount of extent is dropping which means that each year the minimum amount of ice covering is dropping. AKA loss of ice!
+
+```{r}
+new_plot <- ice2%>% #call in ice data
+  group_by(Year)%>% #group by year
+  summarize(min_ext = min(Extent))%>% #look at mins
+  plot(min_ext~Year) #plot to see min across time
+```
+
+3d. One thing that’s really cool about faceting is that you can use cut_*() functions on continuous variables to make facets by groups of continuous variables. To see what I mean, try cut_interval(1:10, n = 5) See how it makes five bins of even width? We use cut_interval() or other cut functions with faceting like so facet_wrap(~cut_interval(some_variable)).
+
+```{r}
+cut_interval(1:10, n = 5) #code from question
+```
+
+With the original data, plot sea ice by year, with different lines (oh! What geom will you need for that?) for different months. Then, use facet_wrap and cut_interval(Month, n=4) to split the plot into seasons.
+
+```{r}
+ggplot(data = ice2, # call in ice data
+       mapping = aes(x = Year, #x is year, y extent, and then we want to group by month and give each month a diff color
+                     group= Month,
+                     y= Extent,
+                     color= Month))+
+  geom_line()#line b/c you said to use line.
+
+
+ggplot(data = ice2, # call in ice data
+       mapping = aes(x = Year, #x is year, y extent, and then we want to group by month and give each month a diff color
+                     group= Month,
+                     y= Extent,
+                     color= Month))+
+  geom_line()+
+  facet_wrap(cut_interval(ice2$Month, n=4))  #facet wrap to cut the interval of month (diff color lines) into four seasons
+```
+
+3e. Last, make a line plot of sea ice by month with different lines as different years. Gussy it up with colors by year, a different theme, critical values, and whatever other annotations, changes to axes, etc., you think best show the story of this data. For ideas, see the lab, and look at various palettes around. Extra credit for using colorfindr to make a palette.
+
+```{r}
+ggplot(data = ice2, #data 
+       mapping = 
+         aes(x= Month_Name, #x axis will be the month_name
+             group= Year,
+             y= Extent, #y amount of ice
+             color= Year))+ #sort by year
+  geom_line()+ #look at data points just for something different 
+  scale_color_viridis_c(option = "C")+ #new fun colors!
+  labs(title= "Average Extent Per Monnth", #title/subtitle/x&y labels
+        subtitle = "Data from 1980-2010",
+        x= "Month",
+        y= "Extent",
+        color= "Year")
+```
+
+3f. Extra Credit. Make it animated with gganimate. Just like above.
+
+```{r}
+library(ggplot2) #need this to graph
+library(gganimate) #need this to animate
+
+anim <- ggplot(data = ice2, mapping = 
+         aes(x= Month_Name,
+             group= Year,
+             y= Extent,
+             color= Year))+
+  geom_jitter()+
+  labs(title= "Average Extent Per Month",
+        subtitle = "Data from 1980-2010",
+        x= "Month",
+        y= "Extent",
+        color= "Year")+
+  transition_states(Year, #need to animate by year with this function
+                    transition_length = 7, #relative frames for each year 
+                    state_length = 5) #relative frames for pause between each year
+anim #animate to see thorough the years-- lighter dots = 2010
+```
