@@ -1,0 +1,320 @@
+---
+title: "Correlation and Regression HW"
+author: "Wendi White"
+date: "10/12/2020"
+output: html_document
+---
+
+github: https://github.com/wendi-white/biol607_homework 
+
+```{r}
+#libraries
+library(ggplot2)
+library(dplyr)
+library(graphics)
+library(ggeffects)
+```
+
+
+1. Correlation - W&S Chapter 16
+Data at https://whitlockschluter.zoology.ubc.ca/wp-content/data/chapter16/chap16q15LanguageGreyMatter.csv 
+```{r}
+grey_matter <- read.csv("https://whitlockschluter.zoology.ubc.ca/wp-content/data/chapter16/chap16q15LanguageGreyMatter.csv")
+grey_matter #load in data
+```
+
+
+
+Does learning a second language change brin structure? Mechelli et al. (2004) tested 22 native Italian speakers who had learnred English as a second language. Proficiences in reading, writing, and speech were assessed using a number of tests whose results were summarized by a proficiency score gray-matter density was measured in the left interior parietal region of the brain using a neuro-imaging technique, as mm3 of gray matter per voxel. (A voxel is a picture element or pixel in three dimensions) The data are listed in the accompanying table.
+  a. Display the association between the two variables in a scatter plot.
+```{r}
+matter_vs_prof <- ggplot(data= grey_matter, #plot by calling in data and assinging x as grey and y as prof
+                         mapping=aes(x=proficiency, y=greymatter))+
+  geom_point()
+matter_vs_prof
+```
+  
+  b. Calculate the correlation between second language proficiency and gray-matter density.
+  
+  Correlation =0.8183134
+  
+```{r}
+corr_matter_vs_prof <- cor(grey_matter$greymatter, grey_matter$proficiency) #cor of x , y
+corr_matter_vs_prof
+```
+  
+  c. Test the null hypothesis of zero correlation.
+  
+  Reject the null gives small pvalue and says alternative hypthesis true corelation is not equal to zero.
+  
+```{r}
+cor.test( grey_matter$proficiency, grey_matter$greymatter) #use cor.test to test null hypothesis of zero corr 
+```
+  
+  d. What are your assumptions in part (c)?
+  
+Cor.test assumes we are using the pearson test statistic. So we would look at pearson's test assumptions which are:
+  random sample from the population and bivariate normal distribution (linear relationship between x & y, cloud of points has an elliptical shape, frequency distributions of x and y separately are normal).
+  
+  e. Does the scatter plot support these assumptions? Explain
+
+Yes. We have data that is looking to compare to variables of a data set and they distribution of the data plotted against each other looks linear
+
+  
+  f. Do the results demonstarte that second language proficiency affects gray-matter density in the brain? Why or why not
+
+Yes, we get an extremely low p-value (3.264e-06) and we feel confident in our statistics that were used to arrive at this answer.
+  
+
+
+2. Correlation - W&S Chapter 16
+Data at https://whitlockschluter.zoology.ubc.ca/wp-content/data/chapter16/chap16q19LiverPreparation.csv
+
+```{r}
+rat_livers <- read.csv("https://whitlockschluter.zoology.ubc.ca/wp-content/data/chapter16/chap16q19LiverPreparation.csv")
+rat_livers #load in data
+```
+
+The following data are from a laboratory experiment by Smallwood et al. (1998) in which liver preparations from five rats were used to measure the relationship between the administered concentration of taurocholate (a salt normally occuring in liver bile) and the unbound fraction of taurocholate in the liver. 
+  a. Calculate the correlation coefficient between the taurocholate unbound fraction and the concentraion.
+  
+ correlation coeff=  -0.8563765
+ 
+```{r}
+cor(rat_livers$unboundFraction, rat_livers$concentration) #use cor to calc 
+```
+  
+  b. Plot the relationship between the two variables in a graph.
+```{r}
+rat_graph <- ggplot(data=rat_livers, #graph conc by unbound
+                    mapping = aes(x= concentration,
+                                  y= unboundFraction)) +
+  geom_point()
+rat_graph
+```
+
+  c. Examine the plot in part (b). The relationship appears to be maximally strong, yet the correlation coefficient you calculated in part (a) is not near the max possible value. Why not?
+
+This is likely because the relationship looks more like a curve than a line. This could be due to a low sample size or maybe this is just the way the population is.
+
+
+  d. What steps would you take with these data to met the assumptions of correlation analysis?
+
+I would transform the data by doing a log, sqr, etc. tranformation. This would possibly help give us a stronger correlation. Or I would use a different test like a Spearman b/c the data isn't parametric. 
+
+
+3. Correlation SE
+Consider the following dataset:
+
+cats	happiness_score
+-0.30	-0.57
+0.42	-0.10
+0.85	-0.04
+-0.45	-0.29
+0.22	0.42
+-0.12	-0.92
+1.46	0.99
+-0.79	-0.62
+0.40	1.14
+-0.07	0.33
+
+3a. Are these two variables correlated? What is the output of cor() here. What does a test show you?
+
+cor()= 0.6758738
+Shows us that these two variables aren't very correlated (not close to 1 or -1)
+
+```{r}
+cats <- c(-.3, .42, .85, -.45, .22, -.12, 1.46, -.79, .4, -.07)
+happiness_score <- c(-.57, -.1, -.04, -.29, .42,-.92, .99 , -.62, 1.14, .33) #load in the vectors
+
+cat_happy <- data.frame(cats, happiness_score) #create data frame
+cat_happy
+
+cor(cats, happiness_score) #find cor coeff
+```
+
+
+3b. What is the SE of the correlation based on the info from cor.test()
+
+SE of the correlation = 0.260575
+
+```{r}
+cor.test(cats, happiness_score)
+ 
+SE_cor_cats <- sqrt((1-(cor(cats, happiness_score)^2))/(10-2)) #use SE equation to calc 
+SE_cor_cats
+```
+
+
+3c. Now, what is the SE via simulation? To do this, you’ll need to use cor() and get the relevant parameter from the output (remember - you get a matrix back, so, what’s the right index!), replicate(), and sample() or dplyr::sample_n() with replace=TRUE to get, let’s say, 1000 correlations. How does this compare to your value above?
+
+This value is 0.1 less than my value above. This is likely b/c we are doing 1000 samples vs our small population of 10 above. This would make SE go down as a result due to the larger sample size.
+
+```{r}
+
+kitties <- replicate(1000, cor(sample_n(cat_happy, size= nrow(cat_happy), replace=TRUE)) [1,2]) #replicate 100 correlations from our original sample (cat_happy), and then select the row/column in the matrix given
+
+sd(kitties) #sd of a 1000 replications is equal to the SE of the simulation
+
+```
+
+
+## [1] 0.1608964
+4. W&S Chapter 17
+Data at https://whitlockschluter.zoology.ubc.ca/wp-content/data/chapter17/chap17q19GrasslandNutrientsPlantSpecies.csv
+```{r}
+park_grass <- read.csv("https://whitlockschluter.zoology.ubc.ca/wp-content/data/chapter17/chap17q19GrasslandNutrientsPlantSpecies.csv")
+park_grass #load in data
+```
+
+You might think that increasing the resrouces available would elevate the number of plant species that an area could support, but evidence suggests otherwise. The data in the accompnaying table are from the Park Grass Experiment at Rothamsted Experimental Station in the U.K., where grassland field plots have been fertilized annually for the past 150 years (collected by Harpole and Tilman 2007). The number of plant species recorded in 10 plots is given in reponse to the number of different nutrient types added in the fertilizer treatment (nutrient types include nitrogen, phosphorus, potassium, and so on).
+  a. draw a scatter plot of these data. Which variable should be the explanatory variable (X), and which should be the response variable (Y)?
+  
+  Nutrients should be the explanatory var and species should be the response variable b/c you are testing if increasing the nutrients will change the plant species in an area. 
+  
+```{r}
+
+ggplot(data= park_grass, mapping=aes(x=nutrients,
+                                     y=species))  +
+  geom_point()
+```
+  
+  b. What is the rate of change in the number of plant species supported per nutrient type added? Provide a standard error for your estimate.
+  
+  rate of change= -3.339    A single increase in nutrients results in ~3.3 decrease in species 
+  se=  0.438175
+  
+```{r}
+lm_park <- lm(data=park_grass, species~nutrients) # find rate of change by fitting a linear model to get the slope
+
+cor(park_grass) #find cor
+
+sqrt((1-(-0.7321056^2))/(10-2)) #use SE equation 
+```
+  
+  c. Add the least-squares regression line to your scatter plot. What fraction of the variation in the number of pant species is "explained" by the number of nutrients added?
+  
+It's ~73% correlated which is the determining factor of what our slope is. And the slope is what is determining the relationship between nutrient input and plant species.
+
+```{r}
+plot(data = park_grass, species ~ nutrients) + #plot the data from above but add in line with the slope found from our linear model found above
+abline(lm_park)
+
+cor.test(park_grass$nutrients, park_grass$species)
+
+plot(lm_park, which=2)
+plot(lm_park, which=5)
+```
+
+  
+  d. Test the null hypthesis of no treatment effect on the number of plant species. 
+  
+  There is an effect b/c alternative hypothesis suggested and low p-value. 
+  
+```{r}
+cor.test(park_grass$nutrients, park_grass$species) #use cor.test to test the null
+```
+
+
+
+5. W&S Chapter 17-25
+https://whitlockschluter.zoology.ubc.ca/wp-content/data/chapter17/chap17q25BeetleWingsAndHorns.csv 
+```{r}
+beetles <- read.csv("https://whitlockschluter.zoology.ubc.ca/wp-content/data/chapter17/chap17q25BeetleWingsAndHorns.csv")
+beetles #Load data
+```
+
+Many species of beetle produce large horns that are used as weapons or shields. The resources required to build these horns, though, might be diverted from other useful structures. To test this, Elmen (2001) measured the sizes of wings and horns in 19 female of the beetle species Onthophagus Sagittarius. Both traits were scaled for bdy-size differences and hence are referred ot as relative horn and wing sizes. Emlen's data are shown in the following scatter plot aong with the least squares regression line (Y= -0.13 - 132.6X).
+We used this regression line to predict the horn lengths at each o the 19 observed horn sizes. These are given in the following table along with the raw data.
+  a. Use these results to calculate the residuals.
+```{r}
+resids_beetles <- lm(beetles$wingMass~beetles$hornSize) #create linear model
+
+resid(resids_beetles) #use resid to compare the values to the fitted line
+```
+  
+  b. Use your results from part (a) to produce a residual plot.
+```{r}
+plot(resids_beetles, which = 5)
+plot(resids_beetles, which = 4)
+plot(beetles$wingMass~beetles$hornSize)
+```
+  
+  c. Use the graph provided and your residual plot to evaluate the main assumptions of linear regression.
+
+It seems like some of the values are creating a bit too much leverage for a linear regression which means our sample isn't normal. This can further be seen from the plot given to us b/c the larger horn sizes seem to have a bit of variability. 
+
+  d. In light of your conclusions in part (c), what steps should be taken?
+
+We could use nonlinear transformations, find a better model or weight by x values if the source of heteroskedasticity is known.
+  
+  e. Do any other diagnostics misbehave?
+
+Yes, we'd have issues with analyzing the rest of our data such as creating a regression line. B/c there is leverage of our data points we'd expect our regression line to be off and then our follow up statistics b/c we don't meet the assumption of normality.
+
+6. W&S Chapter 17-30
+https://whitlockschluter.zoology.ubc.ca/wp-content/data/chapter17/chap17q30NuclearTeeth.csv  
+```{r}
+cadavers <- read.csv("https://whitlockschluter.zoology.ubc.ca/wp-content/data/chapter17/chap17q30NuclearTeeth.csv")
+cadavers #load data
+```
+
+Calculating the year of birth of cadavers is a trikcy enterprise. One method proposed is based on the radioactivity of the enamel of the body's teeth. The proportion of the radioisotpe 14C in the atmosphere increased dramatically during the era of above ground nuclear bomb testing between 1955 and 1963. Given that the enamel of a tooth is non-regenerating, measuring the 14C content of a tooth tells when the tooth developed, and therefore the year of birth of its owner. Predictions based on this method seem quite accurate (Spalding et al. 2005), as shown int he accompanying graph. The x-axis is A14C, which measures the amount of 14C relative to a standard (as a percentage). There are three sets of lines on this graph. The solid line represents the least-squares regression line, predict the actual year of birth from the estimate base don amount of 14C. One pair of dashes lines shows the 95% confidence bands andn the other shows the 95% prediction interval.
+  a. What is the approximate slope fo the regression line?
+  
+slope= -0.05326 
+  
+```{r}
+lm_cad <- lm(dateOfBirth ~ deltaC14, data = cadavers)
+```
+  
+  b. which pair of lines shows the confidence bands? What do these confidence bands tell us?
+  
+confidence bands are the curved inner lines showing the range likely to contain the value of the the true population mean. 
+  
+  c. Which pair of lines shows the prediction interval? What does the prediction interval tell us?
+  
+Prediction interval are the straight outer lines. They tell us where we'll be likely to find the next set of values if we run our experiment again. 
+
+  
+  d. Using predict() and geom_ribbon() in ggplot2, reproduce the above plot showing data, fit, fit interval, and prediction interval.
+```{r}
+cor.test(cadavers$dateOfBirth,cadavers$deltaC14)
+
+pred_cad <- predict(lm_cad, interval = "prediction")
+conf_cad <- predict(lm_cad, interval= "confidence")
+
+df_conf_pred <- data.frame(cadavers, pred_cad, conf_cad)
+
+fin_plot <- ggplot(data=df_conf_pred,
+                   mapping = aes(x=deltaC14,
+                                 y=dateOfBirth))
+
+ta_da_cadavers <- fin_plot+
+  geom_point()+
+  geom_smooth(method = lm, aes()) +
+  geom_ribbon(aes(ymin=lwr, ymax=upr), alpha=.15)
+
+ta_da_cadavers
+
+
+
+
+
+
+#this was my first attempt but I could only get the CI not the PI. Was I close? or is it not possible to do it this way?????????????
+
+final_plot <- ggplot(data=cadavers, #use cadaver data and give it a y min/max of the DOB since it's the y axis
+                     mapping = aes(x=cadavers$deltaC14,
+                                   y=cadavers$dateOfBirth,
+                                   ymin=cadavers$  dateOfBirth,
+                                   ymax= cadavers$dateOfBirth))+
+             geom_smooth(method = lm)+ #use the lm as what we want to smooth 
+               ggpredict(lm_cad, interval = "confidence")+ #use this to as pred values on graph
+              ggpredict(pred_cad, interval = "predict")+
+              # the light grey ribbon giving y max/ y min values
+            geom_point()
+            # show all the points
+
+final_plot
+```
