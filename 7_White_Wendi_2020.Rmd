@@ -1,0 +1,254 @@
+---
+title: "Cross_validation_and_Bayes_Homework"
+author: "Wendi White"
+date: "10/25/2020"
+output: html_document
+---
+
+github--  https://github.com/wendi-white/biol607_homework 
+
+```{r}
+#libraries
+library(ggpmisc)
+library(ggplot2)
+library(tidyr)
+library(rsample)
+library(dplyr)
+library(purrr)
+library(modelr)
+library(boot)
+library(AICcmodavg) 
+```
+
+For today, we’ll consider data from Brutsaert et al. 2002 looking at how progestrone levels influence respiration at altitude. The data can be downloaded here with progestrone levels and ventilation as a metric of breathing.
+
+```{r}
+setwd("/Users/wendiwhite/Desktop/Ecology/UMass Boston Masters/UMass Masters classes/bio stats 607/data")
+
+breathing <- read.csv("chap17q07ProgesteroneExercise.csv") #read in CSV
+breathing
+```
+
+1. Create models with different polys
+Let’s first look at the data. Plot it, along with a polynomial fit (remember, formula = y ~ poly(x,2) for a quadratic). Then, compare the r2 value of a linear versus fifth order fit. What do you see?
+
+linear R2= 0.24
+5th order poly R2= 0.27
+
+We see that the 5th order poly is a slightly better fit.
+
+```{r}
+breathing_plotted <- ggplot(data=breathing, #plot 
+                            mapping = aes(x=progesterone,
+                                          y=ventilation)) +
+    geom_point() +
+    stat_smooth(method = "lm", formula = y ~ x)+ #linear formula 
+    stat_poly_eq(formula = y ~ x, parse = TRUE) #get r2 value on graph with linear eq
+breathing_plotted
+
+breathing_plotted_2 <- ggplot(data=breathing, #plot
+                            mapping = aes(x=progesterone,
+                                          y=ventilation)) +
+    geom_point()+
+    stat_smooth(method= "lm", formula = y ~ poly(x, 5))+ #same as above but                                                          eq now for                                                                    5th order fit
+    stat_poly_eq(formula = y ~ poly(x, 5), parse = TRUE)
+breathing_plotted_2
+```
+
+
+2. Fit each model with 5-fold CV
+Does that result hold up, or is it due to overfitting? Let’s evaluate by comparing 5-fold CV scores using RMSE. Let’s do this efficiently, though!
+
+A. Get things ready! Make a 5-fold cross validation tibble using rsample::vfold_cv() and then combine each possible fold with the polynomials 1:5 using tidyr::crossing()
+
+```{r}
+five_fold_tibb_breath <- vfold_cv(data =breathing, v=5)%>% #create five folds
+  crossing(p=1:5) #do a cross of the folds with polynomials
+five_fold_tibb_breath
+```
+
+B. Now you have splits and a column of coefficients. Use purr::map2() to make a list column of fit models, where you use the splits and data and the polynomials for you poly() call in the model.
+
+```{r}
+five_fold_tibb_breath <- five_fold_tibb_breath %>% #take table 
+  mutate(fit_models= map2(.x=splits, #create a new model that creates a lm of the folds and polynomials
+                          p,
+                          ~lm(ventilation~poly(progesterone,.y),
+                          data= analysis(.x))))
+five_fold_tibb_breath
+```
+
+C. Great! Now, calculate the rmse for each fold/polynomial combination as we did in lab.
+
+```{r}
+five_fold_tibb_breath_rmse <- five_fold_tibb_breath %>%
+  #create new col rmse with map2 iterating over all splits
+    #and fit models
+  mutate(rmse = map2_dbl(.x= splits, .y= fit_models, #split x , mod y
+                          #model is .y b/c mod is our second arg
+                        ~rmse(model = .y, data = assessment(.x))))
+five_fold_tibb_breath_rmse
+```
+
+
+D. Implications - ok, given that the 5-fold score is the average RMSE across all folds for a given polynomial, show in both a table and figure the relationship between polynomial and out-of-sample RMSE. What does this tell you?
+
+It shows us that our first fold is best fit for our data b/c it has the lowest root mean square error value.
+
+```{r}
+rmse_table <- five_fold_tibb_breath_rmse %>% #take dataset with rmse col
+  group_by(p) %>% #group by poly
+  summarize(per_fold_mean= unique(mean(rmse))) #get mean for each poly
+
+rmse_table
+
+plot_rmse <- ggplot(data = rmse_table, #plot how the mean RMSE changes across our diff folds
+                    mapping = aes(x=p,
+                                  y=per_fold_mean)) +
+    geom_line()
+plot_rmse
+```
+
+3. Compare models and see how they differ from AIC
+That was all well and good, but, how to these results compare to doing this analysis with AIC using the {AICcmodavg} package? Note, you can use dplyr and purrr to not have to fit each model manually.
+
+```{r}
+breath_lm <- lm(ventilation~progesterone, data=breathing) #lm for each poly
+breath_int <-  lm(ventilation~1, data=breathing) 
+breath_sq <- lm(ventilation~poly(progesterone, 2), data=breathing)
+breath_cub <- lm(ventilation~poly(progesterone, 3), data=breathing)
+breath_four <- lm(ventilation~poly(progesterone, 4), data=breathing)
+breath_five <- lm(ventilation~poly(progesterone, 5), data=breathing)
+
+mod_list <- list(breath_int, breath_lm, breath_sq, breath_cub, breath_four, breath_five) #make a list of our lm and then make into a vector
+name_vec <- c("int", "linear", "quad", "cube", "quad", "quin")
+
+aictab(cand.set = mod_list, modnames=name_vec) #get AIC values for poly 1-5
+```
+
+5. Grid sample with Bayes
+    Last week, we did grid sampling with Likelihood. This week, let’s do it with Bayes!
+
+p(H|D)=p(D|H)p(H)p(D)
+
+A. Let’s start with the Palmer Penguins data. Let’s look at just the Gentoo. Why don’t you plot the distribution of the average flipper length of females. We’ll use this data for the exercise. Remember to remove NAs - it will make the rest of the exercise easier. 1 EC for each thing you do to snaz the plot up.
+
+```{r}
+penguins <- palmerpenguins::penguins
+penguins <- penguins %>%
+  filter(species == "Gentoo", na.rm=TRUE) #filter for Gentoo
+summary(penguins)
+
+penguins_fem <- penguins %>%
+  filter(sex == "female", na.rm=TRUE) #filter for females
+summary(penguins_fem)
+
+avg_flip_fem <- ggplot(data = penguins_fem,
+                       mapping = aes(flipper_length_mm))+
+  geom_histogram(colour= "white", fill="pink")+ #plot flipper length densities
+  geom_vline(aes(xintercept=mean(flipper_length_mm, na.rm=T)),    #line for meann filpper length
+               color="blue", linetype="dashed", size=1)
+avg_flip_fem
+```
+
+
+B. OK, this is pretty normal, with a mean of 212.71 and sd of 3.9. Make a grid to search a number of values around that mean and SD, just as you did for likelihood. Let’s say 100 values of each parameter.
+
+```{r}
+cross_peng <- crossing(m= seq(210,220, length.out = 100), s= seq(2,6, length.out=100)) #cross our mean with sd. 100 values with a somewhat center arounnd our known values
+```
+
+
+C. Write a function that will give you the numerator for any combination of m and s! This is just the same as writing a function for likelihood, but including an additional multiplier of p(H), when putting in the likelihood. Let’s assume a prior for m of dnorm(210, 50) and for s of dunif(1,10) - so, pretty weak!
+
+So, we want p(m, s|flipper length)*p(m)*p(s).
+
+BUT - small problem. These numbers get so vanishingly small, we can no longer do calculations with them. So, for any probability density you use, add log=TRUE and take a sum instead of products or multiplication, as
+
+log(p(D|H)p(H))=log(p(D|H))+log(p(H))
+
+```{r}
+bayes_num <- function(m,s){
+  # p(H|D) ~ p(D|H)*p(H)
+  # log(p(H|D)) = log(p(D|H)) + log(p(H)) is what we are after
+  # sum log likelihood + sum of the log of our priors
+  
+  # log(p(D|H)) - log likelihood
+  # sum(dnorm(data, parameters, log = TRUE))
+  sum(dnorm(penguins_fem$flipper_length_mm, m, s, log=TRUE),
+  
+    # log(p(H)) = log(p(s)) + log(p(m))  - log prior 
+    dunif(s, 1,10, log=TRUE),
+    dnorm(m, mean = 210, sd = 50, log = TRUE))
+}
+```
+
+
+D. Great! Now use this function with your sample grid to get the numerator of the posterior, and then standardize with the p(D) - the sum of all numerators - to get a full posterior. Note, as we’re working in logs, we just subtract log(p(D)). What is the modal estimate of each parameter? How do they compare to the standard frequentist estimate?
+
+Note: log(p(d)) = log(sum(exp(p(D|H)p(H))))
+
+```{r}
+#P(H|D) num- P(D)
+
+num2 <- cross_peng%>%
+  rowwise() %>% #take grid and then go row by row and find numerator 
+  mutate(num= bayes_num(m,s))
+
+pd= log(sum(exp(num2$num))) # pd formula
+
+
+post_full <- num2 %>%
+  rowwise() %>% #take num function and go row by row annd then add a col with posterior by sub num from p(D) value
+  mutate(posterior= num - pd)
+
+post_full
+```
+
+
+6. Final Project Thinking
+    We’re at the half-way point in the course, and after the mid-term, it’s time to start thinking about your final project. So…. I want to know a bit about what you’re thinking of!
+
+A. What is the dataset you are thinking of working with? Tell me a bit about what’s in it, and where it comes from.
+
+I'm going to work with the PIE long term data set from our lab. It has EVERYTHING! This is apart of a long term research project conducted at PIE to sample across space and time in order to predict/observe the impact of climate change on marshes. There are sediment cores, % cover, sticky trap, bird counts, video, and pitfall data. 
+
+B. What question do you want to ask of that data set?
+
+I want to look at wrack distribution over space and time. I will use this as preliminary data for my project. I also want to gain a better understanding on other aspects of the data so I likely will see if there is any correlation between changes in wrack and soil biogeochemistry, plant composition, herbivore counts, etc. 
+
+EC C. Wanna make a quick visualization of some aspect of the data that might be provocative and interesting?
+```{r}
+setwd("/Users/wendiwhite/Desktop/Ecology/UMass Boston Masters/UMass Masters classes/bio stats 607/data")
+wrack_det <- read.csv("wrack_PIE.csv") #read in dataset
+
+
+wrack_wrack <- wrack_det%>% #filter for wrack and site
+    filter(type== "wrack", site== c("CLUBHEAD", "LM3", "NELSON","PATS",
+                                  "SHAD EAST","WEST EAST"))%>%
+  na.omit(wrack_det)
+
+wrack_detritus <- wrack_det%>% #filter for detritus data
+  filter(type== "detritus")%>%
+  na.omit(wrack_det)
+
+wrack_plot <- ggplot(data = wrack_wrack, #plot how % cover of wrack changed over time
+                     mapping = aes(x= factor(year),
+                                   y= percent_cover,
+                                   color= site))  +
+              scale_x_discrete()+
+               geom_boxplot(position= "dodge")
+            
+wrack_plot
+
+
+det_plot <- ggplot(data = wrack_detritus, #plot how % cover of detritus changed over time
+                   mapping = aes(x= factor(year),
+                                 y= percent_cover,
+                                 color= site))  +
+         scale_x_discrete()+
+         geom_boxplot(position= "dodge")
+det_plot
+  
+```
+
