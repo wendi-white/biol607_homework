@@ -1,0 +1,681 @@
+---
+title: "biol_607_midterm"
+author: "Wendi White"
+date: "11/1/2020"
+output: html_document
+---
+
+github: https://github.com/wendi-white/biol607_homework 
+
+```{r}
+#libraries
+library(rsample)
+library(purrr)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(modelr)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(stats)
+library(rstan)
+library(brms)
+library(MASS)
+library(gganimate)
+library(bayesplot)
+library(profileModel)
+library(AICcmodavg)
+library(compare)
+library(tidybayes)
+library(rsample)
+library(boot)
+library(modelr)
+```
+
+
+1) Sampling your system (10 points) Each of you has a study system your work in and a question of interest. Give an example of one variable that you would sample in order to get a sense of its variation in nature. Describe, in detail, how you would sample for the population of that variable in order to understand its distribution.Questions to consider include, but are not limited to: Just what is your sample versus your population? What would your sampling design be? Why would you design it that particular way? What are potential confounding influences of both sampling technique and sample design that you need to be careful to avoid? What statistical distribution might the variable take, and why?
+
+
+One variable I would sample is wrack abundance in order to get its variation across time (seasons/years) and elevation. To sample for a population I would want to do sample transects across high, mid and low elevations at the low tide in the marsh and take data during the low tides during peak wrack season (spring) for maybe about 1 week. I'd imagine wanting to observe the back to back low tides despite lighting issues so I could mark and understand true max rack replacement. This would give me an idea about wrack replacement and if it stays consistent over tides (also track how high each tide is). After peak season I would likely sample once every month until winter when snow started to compile and then start sampling again after the winter months and resume heavy sampling during the spring again. Likely the largest impacts of wrack will happen during spring and it will be essential to have accurate measurements of wrack abundance.
+
+When I go out to sample I would use MARINe protocols for my transects. At the start of the experiment I would set up 10 permanent transects grids that are 100m long and travel back from the creek edges. I can use GPS points or permanent markers (PVC) to set the transects. We'd take a measurement at every 0.5m and record if there was wrack (classified as fresh vs old and also wrack species type) or none.
+
+Answering the questions presented after this brief layout:
+  1. Just what is your sample versus your population? 
+      My sample is the ten transects that start from the creek bank but my population is wrack across the entirety of the marsh to look at its distribution.
+      
+  2. What would your sampling design be? 
+      Sampling across 10 permanent 100m transects. Data points tell us if there is wrack or not. If there is wrack what species is it? What state is it in (fresh vs old)?
+      
+  3. Why would you design it that particular way? 
+      I'd design it in this way so I could get an overall idea of the distribution of wrack across the marsh. Using fixed plots will also let us look at wrack replacement during peak season/ over different high tides.
+      
+  4. What are potential confounding influences of both sampling technique and sample design that you need to be careful to avoid? 
+      Nothing, it's perfect :) 
+      Just kidding. When sampling I'd need to be sure that what I define as "fresh" vs "old" is clear. This would take some field observations and a literature dive as I'm newer to this system. Based on my previous experiences, kelp is old when it's dried out and/or browned.
+      
+  5. What statistical distribution might the variable take, and why?
+      I would imagine that we see differences in wrack abundance maybe across tides but almost certainly across seasons due to higher production of algae during the spring. Also, I would imagine that we would see higher wrack deposits in the high intertidal b/c replacement is dependent on the next high tide and if it will be swept back out or not. The amount of time wrack spends in an area also adds to how long it has to decompose/subsidize the local area. 
+
+
+
+2) Data Reshaping and Visualization. Johns Hopkins has been maintaining one of the best Covid-19 timeseries data sets
+out there. The data on the US can be found 
+"https://github.com/CSSEGISandData/COVID-19/blob/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv"
+with information about what is in the data at 
+"https://github.com/CSSEGISandData/COVID-19/tree/master/csse_covid_19_data"
+
+2a) Access (5 points) Download and read in the data. Can you do this without downloading, but read directly from the archive (+1)
+
+```{r}
+covid_confirmed <-  read.csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv", check.names = F) #load data but take out the X before all the dates
+
+covid_confirmed<- covid_confirmed[,c(6,7,12:298)] #pull just the admin, state and date columns
+```
+
+2b) It’s big and wide! (10 Points) The data is, well, huge. It’s also wide, with dates as columns. Write a function that, given a state, will output a time series (long data) of cumulative cases in that state as well as new daily cases. Note, let’s make the date column that emerges a true date object. Let’s say you’ve called it date_col. If you mutate it, mutate(date_col = lubridate::mdy(date_col)), it will be turned into a date object that will have a recognized order. {lubridate} is da bomb, and I’m hoping we have some time to cover it in the future. +5 extra credit for merging it with some other data source to also return 
+cases per 100,000 people.
+
+```{r}
+func_by_state <- function(state){ #when given a state
+  #pivot our data longer so that we get a date's become read rowwise not as columns
+  covid_longer <- pivot_longer(covid_confirmed, -c(Province_State, Admin2),
+               names_to = "date_col",
+               values_to = "cumulative_cases") %>% 
+    #creating new date col in form of mdy
+    mutate(date_col = lubridate::mdy(date_col))
+    #create a new df that calls for a specific state
+    specific_state <- covid_longer %>%
+      #add in a daily cases col that takes cum cases-cum cases from day before to give you updated daily
+      mutate(daily_cases= (cumulative_cases)-(lag(cumulative_cases, k=1)))%>%
+      #filter by state
+      filter(Province_State == state) %>%
+      #summarize with df of state, date, cum cases, and daily cases
+      summarize(Province_State, date_col, cumulative_cases, daily_cases)
+    #final df that groups by dates so that each state has one reading per day not one reading per county per day
+    df <- specific_state %>%
+      group_by(date_col)%>%
+      summarize(new_daily_cases=sum(daily_cases),
+                cumulative_cases= sum(cumulative_cases))%>%
+      filter(new_daily_cases >= 0)
+  return(df)
+}  
+mass_df <- func_by_state("Massachusetts") #test for mass
+
+alaska_df <- func_by_state("Alaska") #test for alaska
+```
+
+
+2c) Let’s get visual! (10 Points) Great! Make a compelling plot of the time series for Massachusetts! Points for style, class, ease of understanding major trends, etc. Note, 10/10 only for the most killer figures. Don’t phone it in! Also, note what the data from JHU is. Do you want the cumulative, or daily, or what?
+
+```{r}
+coeff <- 50 #set coeff in order for secondary axis to be of right proportion 
+
+#call in mass df and filter for only cases >0 (noticed one neg number in data and also the top number in the column is funky b/c it's doing a cum-last cum so produces large neg #)
+mass_plot <- ggplot(data=mass_df %>%
+                      filter(new_daily_cases > 0)%>%
+                      filter(cumulative_cases > 0),
+                    mapping = aes(x= date_col)) +
+  #x is always date but then two y axis with new daily and cumulative
+  geom_line(aes(y=new_daily_cases, colour="new_daily_cases")) +
+  geom_line(aes(y=cumulative_cases / coeff, colour="cumulative_cases")) + # divide by coeff so it's proportional to the other y scale
+  #the continuous y scale needs the sec axis scale to be set by the coeff
+  scale_y_continuous(
+    #First axis name
+    name = "New daily cases" , 
+    # Add a second axis and specify name
+    sec.axis = sec_axis(~.*coeff, name="Cumulative cases")) +
+  #label whole graph
+  labs(title= "Changes in new daily annd cumulative cases for Massachusetts",
+        subtitle = "Tracking changes from Jan-Nov 2020",
+        x= "Time",
+        y= "New daily cases")+
+  #remove legend title
+  theme(legend.title=element_blank())+
+      #give lines colors
+  scale_color_manual(values=c("#CC6666", "#9999CC"))+
+  transition_reveal(date_col) #animate it so it animates by the date
+mass_plot
+```
+
+2d) Cool. Now, write a function that will take what you did above, and create a plot for any state - so, I enter Alaska and I get the plot for Alaska! +2 if it can do daily or cumulative cases - or cases per 100,000 if you did that above. +3 EC if you highlight points of interest - but dynamically using the data. Note, you might need to do some funky stuff to make things fit well in the plot for this one. Or, meh.
+
+```{r}
+func_by_state_plot <- function(state, coeff= 50){ #when given a state and coeff (set at 50 which would work for them all)
+  ##pivot our data longer so that we get a date's become read rowwise not as columns
+  covid_longer <- pivot_longer(covid_confirmed, -c(Province_State, Admin2),
+               names_to = "date_col",
+               values_to = "cumulative_cases") %>% 
+    #creating dates column in mdy format
+    mutate(date_col = lubridate::mdy(date_col))
+    #create a new df that calls for a specific state
+    specific_state <- covid_longer %>%
+    #add in a daily cases col that takes cum cases-cum cases from day before to give you updated daily
+      mutate(daily_cases= (cumulative_cases)-(lag(cumulative_cases, k=1)))%>%
+      #filter by state
+      filter(Province_State == state) %>%
+      #summarize with df of state, date, cum cases, and daily cases
+      summarize(Province_State, date_col, cumulative_cases, daily_cases)
+    #final df that groups by dates so that each state has one reading per day not one reading per county per day
+    df <- specific_state %>%
+      group_by(date_col)%>%
+      summarize(new_daily_cases=sum(daily_cases),
+                cumulative_cases= sum(cumulative_cases))
+    #call in df and filter for only cases >0 (noticed one neg number in data and also the top number in the column is funky b/c it's doing a cum-last cum so produces large neg #)
+    plot <- ggplot(data=df %>%
+                      filter(new_daily_cases > 0)%>%
+                      filter(cumulative_cases > 0),
+                   #x is always date but then two y axis with new daily and cumulative
+                    mapping = aes(x= date_col))+
+  geom_line(aes(y=new_daily_cases, colour="new_daily_cases"))+
+  geom_line(aes(y=cumulative_cases / coeff, colour="cumulative_cases"))+ # divide by coeff so it's proportional to the other y scale
+  #the continuous y scale needs the sec axis scale to be set by the coeff
+  scale_y_continuous(
+    #First axis name
+    name = "New daily cases",
+    # Add a second axis and name it 
+    sec.axis = sec_axis(~.*coeff, name="Cumulative cases")) +
+  labs(title= "Changes in new daily cases and cumulative cases over time",
+        subtitle = state,
+        x= "Time",
+        y= "New daily cases")+
+  #remove legend title
+  theme(legend.title=element_blank())+
+      #give lines colors
+  scale_color_manual(values=c("#CC6666", "#9999CC"))+
+  transition_reveal(date_col) #animate it
+  return(plot)
+}
+
+
+func_by_state_plot("Alaska") #try with alaska
+```
+
+
+3. Let’s get philosophical. (10 points)
+We have discussed multiple inferential frameworks this semester. Frequentist NHST, Likelihood and model comparison, Baysian probabilistic thinking, Assessment of Predictive Ability (which spans frameworks!), and more. We’ve talked about Popper and Lakatos. Put these pieces of the puzzle together and look deep within yourself. What do you feel is the inferential framework that you adopt as a scientist? Why? Include in your answer why you prefer the inferential tools (e.g. confidence intervals, test statistics, out-of-sample prediction, posterior probabilities, etc.) of your chosen worldview and why you do not like the ones of the other one. This includes defining just what those different tools mean, as well as relating them to the things you study. extra credit for citing and discussing outside sources - one point per source/point 
+
+Well to be quite honest I was a frequentist before starting this class. I very heavily relied on running an analysis or looking at an analysis in a paper and saying oh the p-value is low, reject the null, cool. In part this was all I had been taught so it was quite mind bottling to start thinking about statistics in a new way. In the past all I was worried about was much of what the pregnant meme stands for (ensuring you don't have Type I- rejecting the null even though it's true or Type II error- failing to reject the null). 95% confidence intervals were a safe place to start!
+
+This year will really be my first attempt at developing a project with statistics in mind. One of the first times I had really thought about statistical theory was upon the introduction of Lakatos and Popper. I more strongly identify with Lakatos b/c of his idea that we need research programs to get at an overall hard core theory. When I conceptually think about the impacts of subsidies on food webs, there are so many examples that can conclude different results. Sometimes subsidies are good and sometimes they can be bad. We create a body of literature as a scientific community to define and build upon current standing theories in an attempt to paint a bigger picture.
+
+Moving into the way I analyze problems though, I now think I most heavily reside with looking at likelihood and model comparisons. After showing us how our linear models are used to do the same interpretations as t-tests, it all really came together for me. I had been relying on my (narrow) previous knowledge and I think needed the dots to connect before I could really commit to understanding why we run linear models. It's because everything just IS a linear model!! And now I can finally get behind reading the different graphs and seeing how well our data behaves. And then furthering this by looking at how well my data says something about my system is even COOLER! I always relied on a p-value to tell me how confident I can be in my data and the analysis it produces. Now being able to look at a ggplot, which, or qqplot and knowing what to take away from it I feel confident in this type of analysis.
+
+I will admit that I'm still trying to get a better grasp on utilizing bayesian statistics. I haven't ever used real data with bayes statistics and so I'm having a hard time applying it to a question. Once I begin an experiment and can begin to think about the impacts of a prior on my analysis I could see myself starting to change my mindset to work more with this theorem. When we did the problem with the sun I can see how taking our priors into account is crucial. I also think that analyzing credible intervals could be highly beneficial to understand the probability of observing an unobserved parameter. 
+
+Overall, I see this class helping me grow in the way I think about statistics (and read other papers!). I can foresee my mindset changing as I learn more and develop my own research.
+
+
+
+
+
+4) Bayes Theorem (10 points)
+I’ve referenced the following figure a few times. I’d like you to demonstrate your understanding of Bayes Theorem by hand (e.g. calculate it out and show your work - you can do this all in R, I’m not a monster) showing what is the probability of the sun exploding is given that the device said yes. Assume that your prior probability that the sun explodes is p(Sun Explodes) = 0.0001 (I’ll leave it to you to get p(Sun Doesn’t Explode). The rest of the information you need - and some you don’t - is in the cartoon - p(Yes | Explodes), p(Yes | Doesn’t Explode), p(No | Explodes), p(No | Doesn’t Explode). 
+
+The frequentist very heavily relies on the probability of rolling a 6 twice in a row. However, this approach isn't really answering our question b/c that means we can't make the argument that we know it's highly unlikely that the sun is ever going to explode. That is the difference between frequentist and bayes statistics b/c with bayes we can take our prior knowledge into account. It changes it from a 2.7% chance the sun explodes given a yes to a 0.3488141% chance the sun will explode. It's HIGHLY unlikely!
+
+
+My math:
+p(sun exploding | detector says yes) = p(detector says yes | sun exploding) * p(sun exploding) / p(detector says yes)
+
+p(e|d)                   =   p(d|e)         *p(e)  / p(d)
+                         =   35/36          *0.0001/ 0.02787222
+                         = 0.003488141
+
+
+p(d|e) lik of observing a yes from the machine given our data that the sun exploded. So this lik is 35/36 b/c the machine only lies to us 1/36 times (1/6 x 1/6= prob of rolling two 6's)
+                          
+p(e) prob sun will explode-- given as 0.0001
+
+p(d) what is the prob that the detector will detect an explosion. Need to look at the option for the 
+    machine correct and explode + machine to lie and explode 
+    = ((35/36)*0.0001) + ((1 - (35/36))*(1 - 0.0001))
+    = 0.02787222
+
+```{r}
+#p(sun exploding | detector says yes) = p(detector says yes | sun exploding) * p(sun exploding) / p(detector says yes)
+#p(e|d)                   =   p(d|e)         *p(e)  / p(d)
+#                         =   35/36          *0.0001/ 0.02787222
+#                         = 0.003488141
+
+
+#p(d|e) lik of observing a yes from the machine given our data that the sun exploded. So this lik is 35/36 b/c the machine only lies to us 1/36 times (1/6 x 1/6= prob of rolling two 6's)
+                          
+#p(e) prob sun will explode-- given as 0.0001
+
+#p(d) what is the prob that the detector will detect an explosion. Need to look at the option for the 
+    #machine correct and explode + machine to lie and explode 
+    #= ((35/36)*0.0001) + ((1 - (35/36))*(1 - 0.0001))
+    #= 0.02787222
+```
+
+4a Extra Credit (10 Points) Why is this a bad parody of frequentist statistics?
+
+The frequentist compares the probability of the machine lying to a p-value. They say b/c it's pvalue is <0.05 the sun has exploded. But the p-value is a completely different thing then the probability ratio, which is why it's a bad parody of frequentist statistics. 
+
+
+
+5) Quailing at the Prospect of Linear Models
+I’d like us to walk through the three different ‘engines’ that we have learned about to fit linear models. To motivate this, we’ll look at Burness et al.’s 2012 study "Post-hatch heat warms adult beaks: irreversible physiological plasticity in Japanese quail 
+http://rspb.royalsocietypublishing.org/content/280/1767/20131436.short the data for which they have made available at Data Dryad at http://datadryad.org/resource/doi:10.5061/dryad.gs661. We’ll be looking at the morphology data.
+
+```{r}
+setwd("/Users/wendiwhite/Desktop/Ecology/UMass Boston Masters/UMass Masters classes/bio stats 607/data")
+morphology <- read.csv("Morphology data.csv") %>% #load in morph data w/out na's
+  na.omit()
+morphology
+```
+
+
+5a) Three fits (10 points)
+To begin with, I’d like you to fit the relationship that describes how Tarsus (leg) length predicts upper beak (Culmen) length. Fit this relationship using least squares, likelihood, and Bayesian techniques. For each fit, demonstrate that the necessary assumptions have been met. Note, functions used to fit with likelihood and Bayes may or may not behave well when fed NAs. So look out for those errors.
+
+```{r}
+#LEAST SQUARES####
+ggplot(data= morphology, mapping=aes(x=tarsus_mm,
+                                     y=culmen_mm))  +
+  geom_point() #first graph the relationship of tarsus on culmen
+
+lm_morph <- lm(data=morphology, culmen_mm~tarsus_mm) #fit a lm to find slope/ y-int
+lm_morph  #y-int =  -0.09871     slope= 0.37293  
+summary(lm_morph)
+#plot the data from above but add in line with the slope found from our linear model found above
+plot(data = morphology, culmen_mm~tarsus_mm) + 
+  abline(lm_morph)
+
+#run cor test to see if tarsus does influence culmen length 
+cor.test(morphology$culmen_mm, morphology$tarsus_mm) 
+#get 0.8970803 so there seems to be a strong corr. Reject null that says no correlation 
+
+plot(lm_morph, which=2) #look at qq plot. See there is some dev from line at both ends
+plot(lm_morph, which=5) #cooks distance makes me think we get some var as we move out due to having fewer birds with large tarsus lengths
+
+
+
+
+
+
+#LIKELIHOOD####
+#initial visualization to determine if lm is appropriate
+ggplot(data= morphology, mapping=aes(x=tarsus_mm,
+                                     y=culmen_mm))  +
+  geom_point() #is there relation between x and y var... seems like it! so we'll fit that model
+
+morph_mod <- glm(culmen_mm ~ tarsus_mm, #create a glm with (y~x)
+               family = gaussian(link = "identity"),  #identity b/c not transforming our data
+               data=morphology)
+morph_mod
+
+
+#assumptions
+morph_fit <- predict(morph_mod) #predictions from the model create above
+morph_fit
+morph_res <- residuals(morph_mod) #extracts residuals of model
+morph_res
+
+qplot(morph_fit, morph_res) #plot relationship of predicted vs residuals of model see no relationship 
+
+qqnorm(morph_res)
+qqline(morph_res)
+
+plot(profile(morph_mod)) #must see a line and then we're okay (splits the V) 
+
+#LRT test of model
+morph_mod_null <- glm(culmen_mm ~ 1, #what would response var would look like in a null situation (~1)
+               family = gaussian(link = "identity"), 
+               data=morphology)
+  
+anova(morph_mod_null, morph_mod, test = "LRT") #like ratio test #look p-value and so reject the null 
+
+#t-tests of parameters
+summary(morph_mod)
+
+
+
+
+
+
+
+#BAYESIAN####
+morph_lm_bayes <- brm(culmen_mm ~ tarsus_mm, #create bayes model (y~x)
+                     family = gaussian(link="identity"),
+                     data= morphology)
+morph_lm_bayes
+
+print(summary(morph_lm_bayes), digits= 5) #summary table with 5 digits out
+
+color_scheme_set("viridis") #set a color scheme 
+
+#visually investigate our chains
+#chains converge priors look great!
+plot(morph_lm_bayes) 
+plot(morph_lm_bayes, par= "b_Intercept")
+mcmc_trace(morph_lm_bayes)
+
+#Look at a diagnostic of convergence
+#Gelmen-Rubin statistic-- Rhat (want Rhat to be 1)
+rhat(morph_lm_bayes) #can see all values are close to 1 #looks good!
+  #usually only work if off by something in the hundredths 
+
+mcmc_acf(morph_lm_bayes) #looks good
+
+#check the match between our data and our chains
+# for distributions of data of y
+pp_check(morph_lm_bayes, "dens_overlay") #green is posteriors from fit
+                #black is dist of length in bayes
+                #looks like a good fit!
+
+#is our error normal? checking our residuals
+#about error and future predictions 
+pp_check(morph_lm_bayes, "error_hist") #residuals look good!
+pp_check(morph_lm_bayes, "error_scatter") #relationship 
+        #between residuals and obs values.. see that it's  
+        #generally linear so we're good!
+pp_check(morph_lm_bayes, "error_scatter_avg") #takes avg pred error
+          #over all posteriors
+
+
+#to get at looking at fitted v residuals. did we miss a nonlinearity??
+morph_res <- residuals(morph_lm_bayes) %>%
+  as_tibble
+morph_fit <- fitted(morph_lm_bayes) %>%
+  as_tibble
+
+plot(y=morph_res$Estimate, x=morph_fit$Estimate) #fitted vs res plot. All looks good!
+```
+
+
+5b) Three interpretations (10 points)
+OK, now that we have fits, take a look! Do the coefficients and their associated measures of error in their estimation match? How would we interpret the results from these different analyses differently? Or would we? Note, confint works on lm objects as well.
+
+We see that our lm and glm models produce the exact same coefficients and the associated measures of error, bayes produces nearly the same coeff/err. We wouldn't interpret the lm/glm results differently. Bayes is slightly diff b/c it's asking a diff question and performing a different function but b/c we didn't input priors into the function this is why we get nearly the same outputs. I would argue b/c we aren't using any priors a lm or glm will work to answer the question being asked: Is there a relationship between Tarsus and culmun? Can we use tarsus length to predict culmun?
+
+
+One other aspect to look at is the confidence intervals vs credible intervals. The glm and lm both have very similar confidence intervals which tells us how confident we are that our values are truly apart of this model. And if we wanted to replicate this experiment again, our true value would occur 95% percent of the time. In the bayes analysis though, we are looking at credible intervals which tell us the area that we will find 95% of our possible parameter values.
+
+
+
+LM
+Coefficients:
+             Estimate Std. Error t value Pr(>|t|)    
+(Intercept) -0.098707   0.215450  -0.458    0.647    
+tarsus_mm    0.372927   0.006646  56.116   <2e-16 ***
+                 2.5 %    97.5 %
+(Intercept) -0.5216505 0.3242363
+tarsus_mm    0.3598809 0.3859727
+
+
+GLM
+Coefficients:
+             Estimate Std. Error t value Pr(>|t|)    
+(Intercept) -0.098707   0.215450  -0.458    0.647    
+tarsus_mm    0.372927   0.006646  56.116   <2e-16 ***
+
+                 2.5 %    97.5 %
+(Intercept) -0.5209805 0.3235663
+tarsus_mm    0.3599015 0.3859520
+
+
+
+BRM
+          Estimate Est.Error l-95% CI u-95% CI    Rhat Bulk_ESS
+Intercept -0.09415   0.21423 -0.51603  0.32000 1.00038     4491
+tarsus_mm  0.37278   0.00661  0.35975  0.38575 1.00037     4511
+          Tail_ESS
+Intercept     3111
+tarsus_mm     3105
+        
+
+```{r}
+#summary of models
+summary(lm_morph)
+summary(morph_mod)
+print(summary(morph_lm_bayes), digits= 5) #summary table with 5 digits out
+
+#conf intervals for each model
+confint(morph_mod) 
+confint(lm_morph)
+```
+
+
+5c) Everyday I’m Profilin’ (10 points)
+For your likelihood fit, are your profiles well behaved? For just the slope, use grid sampling to create a profile. You’ll need to write functions for this, sampling the whole grid of slope and intercept, and then take out the relevant slices as we have done before. Use the results from the fit above to provide the reasonable bounds of what you should be profiling over (3SE should do). Is it well behaved? Plot the profile and give the 80% and 95% CI (remember how we use the chisq here!). Verify your results with profileModel.
+
+Our profiles seem to be well behaved behaved. Our plot and ProfileModel plot both give us nice parabolic curves. 
+
+95% CI is slopes 0.3706061	- 0.3722222	
+80% CI is slopes 0.3710101  - 0.3718182	
+
+```{r}
+#write a function sampling the whole grid of slope and intercept, and then take out the relevant slices as we have done before
+likhood_fun <- function(slope, intercept){ #function given slope/int
+  morph_new <- slope* morphology$tarsus_mm + intercept  
+  #creating data set that includes operation for linear regression
+  sum(dnorm(morphology$culmen_mm, morph_new, log = TRUE)) #sum all the log data
+  }
+
+morph_grid <- tibble(slope = seq(0.35, 0.39, length.out = 100), #create tibble that seq over 3SE of our slope and intercept values found from 5b
+                     intercept = seq(-0.74, 0.55, length.out= 100)) %>%
+  group_by(slope, intercept) %>% #group by slope and int
+  mutate(loglikelihood = likhood_fun(slope,intercept), #put our slope/int through likhood function and set deviance to measure our fit
+    deviance = -2 * loglikelihood) %>%  
+  ungroup()
+
+
+like_plot <- ggplot(data=morph_grid, #plot our data to look at slope and the loglikelihood of these sloeps
+       mapping=aes(x=slope,
+                   y=loglikelihood)) +
+  geom_point()+
+   geom_line(data= morph_grid%>% #create ranges of where our slope is within 95% CI. #'s grabbed from here to also put the range of our slopes in answer above
+               filter(loglikelihood >= (max(loglikelihood)- qchisq(0.95, df=1)/2)) %>%
+               as.data.frame()%>%
+               head(),
+             aes(x=slope,
+                 y=loglikelihood),
+             color="pink",
+             size=4)+
+  geom_line(data= morph_grid %>% #create ranges of where our slope is within 80% CI. #'s grabbed from here to also put the range of our slopes in answer above
+               filter(loglikelihood >= (max(loglikelihood)- qchisq(0.80, df=1)/2)),
+             aes(x=slope,
+                 y=loglikelihood),
+             color="blue",
+            size=4)
+
+
+#check with profileModel and I'd say our model is well behaved.This is our deviance profile and it shows us nice parabolic curved shapes
+morph_prof_model <- profileModel(morph_mod, 
+                     objective = "ordinaryDeviance",
+                     quantile = qchisq(0.8,0.95))
+plot(morph_prof_model)
+```
+
+5d) The Power of the Prior (10 points)
+This data set is pretty big. After excluding NAs in the variables we’re interested in, it’s over 766 lines of data! Now, a lot of data can overwhelm a strong prior. But only to a point. Show first that there is enough data here that a prior for the slope with an estimate of 0.7 and a sd of 0.01 is overwhelmed and produces similar results to the default prior. How different are the results from the original? Second, randomly sample 10, 100, 300, and 500 data points. At which level is our prior overwhelmed (e.g., the prior slope becomes highly unlikely)? Communicate that visually in the best way you feel gets the point across, and explain your reasoning.
+
+Old vs new we see that there is a quite a difference in our y-intercept and also a difference in our slope. It makes sense though that we have a slight shift toward a 0.7 slope since we put that in as a prior our y-int is really different though! When we start to change our sample size though we see that a larger sample size (over 10) overwhelms our prior. We would expect this to happen and I'd argue 10 doesn't overwhelm it b/c there is a good amount of overlap between that and our origonal. Once we look at the n=100 though only a small part of the tail maybe overlaps with the origonal. But again this makes sense b/c 10 samples is very different than 100!
+
+BRM- old
+          Estimate Est.Error l-95% CI u-95% CI    Rhat Bulk_ESS
+Intercept -0.09415   0.21423 -0.51603  0.32000 1.00038     4491
+tarsus_mm  0.37278   0.00661  0.35975  0.38575 1.00037     4511
+
+
+
+BRM- new
+          Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
+Intercept    -4.25      0.27    -4.78    -3.72 1.00     1980     2072
+tarsus_mm     0.50      0.01     0.49     0.52 1.00     1925     2069
+
+
+
+
+```{r}
+#set up strong prior
+morph_lm_bayes <- brm(culmen_mm ~ tarsus_mm, #create bayes model (y~x)
+                     family = gaussian(link="identity"),
+                     data= morphology%>%
+                       sample_n(10),
+                      #prior for the slope
+                      prior = c(prior(coef = "tarsus_mm",
+                                      #with an estimate of 0.7 (mean) and sd of 0.01
+                                      prior = normal(0.7,0.01))),
+                      chains = 3)
+
+
+#randomly sample 10 data points, put sample n=10 to only pull 10 random draws from our morph data
+morph_lm_bayes_10 <- brm(culmen_mm ~ tarsus_mm, #create bayes model (y~x)
+                     family = gaussian(link="identity"),
+                     data= morphology%>%
+                       sample_n(10),
+                      #prior for the slope
+                      prior = c(prior(coef = "tarsus_mm",
+                                      #with an estimate of 0.7 (mean) and sd of 0.01
+                                      prior = normal(0.7,0.01))),
+                      chains = 3)
+
+
+#randomly sample 100 data points put sample n=100 to only pull 100 random draws from our morph data
+morph_lm_bayes_100 <- brm(culmen_mm ~ tarsus_mm, #create bayes model (y~x)
+                     family = gaussian(link="identity"),
+                     data= morphology%>%
+                       sample_n(100),
+                      #prior for the slope
+                      prior = c(prior(coef = "tarsus_mm",
+                                      #with an estimate of 0.7 (mean) and sd of 0.01
+                                      prior = normal(0.7,0.01))),
+                      chains = 3)
+
+
+#randomly sample 300 data points put sample n=300 to only pull 300 random draws from our morph data
+morph_lm_bayes_300 <- brm(culmen_mm ~ tarsus_mm, #create bayes model (y~x)
+                     family = gaussian(link="identity"),
+                     data= morphology%>%
+                       sample_n(300),
+                      #prior for the slope
+                      prior = c(prior(coef = "tarsus_mm",
+                                      #with an estimate of 0.7 (mean) and sd of 0.01
+                                      prior = normal(0.7,0.01))),
+                      chains = 3)
+
+
+#randomly sample 500 data points put sample n=500 to only pull 500 random draws from our morph data
+morph_lm_bayes_500 <- brm(culmen_mm ~ tarsus_mm, #create bayes model (y~x)
+                     family = gaussian(link="identity"),
+                     data= morphology%>%
+                       sample_n(500),
+                      #prior for the slope
+                      prior = c(prior(coef = "tarsus_mm",
+                                      #with an estimate of 0.7 (mean) and sd of 0.01
+                                      prior = normal(0.7,0.01))),
+                      chains = 3)
+
+
+#set them all as df
+morph_lm_bayes <- as.data.frame(morph_lm_bayes)
+
+morph_lm_bayes_10 <- as.data.frame(morph_lm_bayes_10)
+
+morph_lm_bayes_100 <- as.data.frame(morph_lm_bayes_100)
+
+morph_lm_bayes_300 <- as.data.frame(morph_lm_bayes_300)
+
+morph_lm_bayes_500 <- as.data.frame(morph_lm_bayes_500)
+
+
+ggplot()+ #plot all of our different samples to visualize. The black fill is our actual prior 
+  geom_density(data = morph_lm_bayes,
+       mapping = aes(x=b_tarsus_mm),
+       alpha=0.2, fill="black") +
+  geom_density(data = morph_lm_bayes_10,
+       mapping = aes(x=b_tarsus_mm),
+       alpha=0.2, color="purple") +
+  geom_density(data = morph_lm_bayes_100,
+       mapping = aes(x=b_tarsus_mm),
+       alpha=0.2, color="orange") +
+  geom_density(data = morph_lm_bayes_300,
+       mapping = aes(x=b_tarsus_mm),
+       alpha=0.2, color="red") +
+  geom_density(data = morph_lm_bayes_500,
+       mapping = aes(x=b_tarsus_mm),
+       alpha=0.2, color="yellow")
+```
+
+
+
+6) Cross-Validation and Priors (15 points)
+There is some interesting curvature in the culmen-tarsus relationship. Is the relationship really linear? Squared? Cubic? Exponential? Use one of the cross-validation techniques we explored to show which model is more predictive. Justify your choice of technique. Do you get a clear answer? What does it say?
+
+It seems that our relationship between culmen and tarsus is cubic as predicted by both Kfold and LOO models. We got a clear answer from our tibble outputs when comparing polys b/c of zero values for the cubic model. Although we did run both cross-val techniques, in the future I would say that running just Kfold would have worked best b/c our data set is large. When doing leave one out cross val this is technically used for smaller data sets b/c it only pulls one data point out each time which helps to keep each sample size big. Our data set is large though so this isn't really something we need to worry about.
+
+KFOLD
+           elpd_diff se_diff
+morph_cub     0.0       0.0 
+morph_four   -2.6       1.3 
+morph_lm    -12.9       5.1 
+morph_sq    -14.2       5.5 
+morph_int  -638.5      23.7 
+
+
+LOO
+           elpd_diff se_diff
+morph_cub     0.0       0.0 
+morph_four   -0.9       0.3 
+morph_lm    -12.1       5.3 
+morph_sq    -13.2       5.6 
+morph_int  -636.5      23.7 
+
+```{r}
+#set up our polys to compare####
+morph_lm <- brm(culmen_mm~tarsus_mm, 
+                data=morphology,
+                family= gaussian(link="identity"))
+morph_int <-  brm(culmen_mm~1, 
+                  data=morphology,
+                family= gaussian(link="identity")) 
+morph_sq <- brm(culmen_mm~poly(tarsus_mm, 2), 
+                data=morphology,
+                family= gaussian(link="identity"))
+morph_cub <- brm(culmen_mm~poly(tarsus_mm, 3), 
+                 data=morphology,
+                family= gaussian(link="identity"))
+morph_four <- brm(culmen_mm~poly(tarsus_mm, 4), 
+                  data=morphology,
+                family= gaussian(link="identity"))
+
+
+#KFOLD####
+#all our kfolds with diff poly
+morph_k <- kfold(morph_lm, k = 10) 
+morph_k
+morph_k_int <- kfold(morph_int, k = 10) 
+morph_k_int
+morph_k_sq <- kfold(morph_sq, k = 10) 
+morph_k_sq
+morph_k_cub <- kfold(morph_cub, k = 10) 
+morph_k_cub
+morph_k_four <- kfold(morph_four, k = 10) 
+morph_k_four
+
+#compare kfolds
+loo_compare(morph_k_four,morph_k_cub, morph_k_sq, morph_k_int, morph_k)
+
+
+
+#LOO####
+#loo of our poly's
+morph_loo <- loo(morph_lm)
+morph_loo
+morph_loo_int <- loo(morph_int)
+morph_loo_int
+morph_loo_sq <- loo(morph_sq)
+morph_loo_sq
+morph_loo_cub <- loo(morph_cub)
+morph_loo_cub
+morph_loo_four <- loo(morph_four)
+morph_loo_four
+
+#compare loos
+loo_compare(morph_loo, morph_loo_int,morph_loo_sq,morph_loo_cub,morph_loo_four)
+```
+
