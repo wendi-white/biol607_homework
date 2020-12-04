@@ -1,0 +1,329 @@
+---
+title: "GLM Practice"
+author: "Wendi White"
+date: "11/22/2020"
+output: html_document
+---
+
+github--  https://github.com/wendi-white/biol607_homework 
+
+```{r}
+knitr::opts_knit$set(root.dir = "/Users/wendiwhite/Desktop/Ecology/UMass Boston Masters/UMass Masters classes/bio stats 607/data") #setwd for rest of file
+```
+
+
+```{r}
+#libraries
+library(ggplot2)
+library(car)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(emmeans)
+library(readr)
+library(brms)
+library(tidybayes)
+library(ggdist)
+library(bayesplot)
+library(purrr)
+library(modelr)
+library(rsample)
+library(boot)
+```
+
+
+1. Comparing Means
+To start with, let’s warm up with a simple one-way ANOVA model. This example, from Whitlock and Schluter chapter 15 question 22 looks at the mass of lodgepole pinecones from different habitats.
+
+1.1. Load and plot the data. Choose a plot that not only shows the raw data, but also the means and SE or CI of those means. +1 EC if Michael thinks it’s fancy.
+```{r}
+setwd("/Users/wendiwhite/Desktop/Ecology/UMass Boston Masters/UMass Masters classes/bio stats 607/data")
+
+pinecones <- read.csv("/Users/wendiwhite/Desktop/Ecology/UMass Boston Masters/UMass Masters classes/bio stats 607/data/15q22LodgepolePineCones.csv")
+
+ggplot(pinecones, 
+       mapping=aes(x=habitat, y=conemass)) + #x hab y conemass
+  stat_summary(color="red", size=1.3) + #plots the SE of the mean
+  geom_boxplot(alpha=0.7) + #transparency of point
+  theme_bw(base_size=17) #font size
+```
+
+
+1.2 Fit a model using least squares and evaluate all relevant assumptions. List them out as you test them. Can we use this model? If not, fix it. But if we can, no fix is needed!
+```{r}
+pines_lm <- lm(conemass~habitat, data=pinecones)
+#assumptions
+plot(pines_lm, which=1)  #residuals vs fitted values
+plot(pines_lm, which=2) #qq plot 
+shapiro.test(residuals(pines_lm)) #test for normality.we do have normal disk
+plot(pines_lm, which=4) #cooks distances vs row labels
+plot(pines_lm, which=5) #plot of residuals against leverages 
+```
+
+
+1.2 How much variation is explained by your model?
+
+88.51% of variation in cone mass is explained by habitat
+
+```{r}
+summary(pines_lm) #summary of model
+```
+
+
+
+1.3 Show which means are different from each other. Are you correcting p-values? If so, how, and justify your choice.
+
+Island absent vs island present and island absent vs mainland present habitats have means that are different from each other.
+
+We don't really need to correct the p-value as we can see it doesn't really change any of our answers. AKA when we do add adjust= "none" it doesn't change our answer.
+
+```{r}
+pines_em <- emmeans(pines_lm, ~ habitat) #get least squares means for each habitat 
+pines_em
+#compare the diff habitats using Tukey test
+pines_cont <- contrast(pines_em, method = "tukey") %>%
+    plot()+ #plot it with a xint of 0 to see diff
+  geom_vline(xintercept=0, color= "red")
+pines_cont
+
+?knitr::knit
+
+#test with no adjustment and find very little difference but not enough diff to show significant diff between 
+#island present and mainland present
+pines_cont_adj <- contrast(pines_em, method = "tukey", adjust = "none") %>%
+  plot()+ #plot it with a xint of 0 to see diff
+  geom_vline(xintercept=0, color= "red")
+pines_cont_adj
+```
+
+
+
+2. Comparing Means from Multiple Categories
+In a study from Rogers et al. (2020) link, the authors performed an experiment where they moved panels that had been colonized by invertebrates on a dock to a nearby rocky jetty where predators could access panels. To separate out the effects of changes in abiotic environment versus predation, they performed a factorial experiment, either caging or not caging panels and placing them either on the side of a cinder block or hanging on a piece of PVC attached to the block where predators would have little access (but weren’t entirely stopped). They then looked at change in total cover of invertebrates. Using this old data file dug off of my hard drive, let’s see what they found.
+
+2.1. Load and plot the data. We are interested in change in percent cover. Choose a plot that not only shows the raw data, but also the means and SE or CI of those means. +1 EC if Michael thinks it’s fancy.
+
+```{r}
+setwd("/Users/wendiwhite/Desktop/Ecology/UMass Boston Masters/UMass Masters classes/bio stats 607/data")
+inverts <- read_csv("/Users/wendiwhite/Desktop/Ecology/UMass Boston Masters/UMass Masters classes/bio stats 607/data/fouling_transplant_data.csv")
+inverts
+
+inverts <- janitor::clean_names(inverts) #take out spaces and capitalization from col names
+inverts
+
+ggplot(inverts, #plot data to look at change in cover across treatments
+       mapping=aes(x=treatment, y=change_in_cover,
+                   color=position_on_block)) +
+  stat_summary(color="black", size=0.8) + #plots the SE of the mean
+  geom_point(alpha=0.7) + #tranparency of point
+  theme_bw(base_size=17) #font size
+```
+
+
+2.2 Fit a model using likelihood and evaluate all relevant assumptions. Do you meet assumptions?
+
+NOPE!! Specifically qq plot seems wonky, residuals vs fitted are pretty scattered, and Shapiro gives us a 0.01687 output which says we don't have a good model... we are rejecting the null that says we a normal distribution. 
+
+
+```{r}
+#use glm b/c looking at likelihood
+inverts_glm <- glm(change_in_cover ~ caged*position_on_block, 
+                   data = inverts,
+                   family = gaussian(link="identity"))#create glm of our data that looks at the interaction of caged and position on block's influence on %cover
+
+plot(inverts_glm, which=1)  #residuals vs fitted values
+plot(inverts_glm, which=2) #qq plot 
+shapiro.test(residuals(inverts_glm)) #test for normality 
+plot(inverts_glm, which=4) #cooks distances vs row labels
+```
+
+
+2.3 If you answered yes to the above…. you are wrong. It doesn’t! Percentage data is weird. Difference in percentages can be ever weirder! There are three tried and true solutions here. But they MIGHT not all work.
+      
+      Incorporate initial cover as a covariate. This takes out that influence, and as such we’re looking at residuals of change. This sometimes, but not always, works.
+
+```{r}
+inverts_glm_int <- glm(change_in_cover ~ caged*position_on_block + initial_cover, 
+                       data = inverts,
+                       family = gaussian(link="identity")) #create glm of our data that looks at the interaction of caged and position on block's influence on %cover and also accounts for the influence that initial cover has on this interaction
+
+
+plot(inverts_glm_int, which=1)  #residuals vs fitted values look more scattered
+plot(inverts_glm_int, which=2) #qq plot looks much better
+shapiro.test(residuals(inverts_glm_int)) #test for normality reject null
+plot(inverts_glm_int, which=4) #cooks distances vs row labels looks good
+```
+
+
+      Divide change by initial cover to express change as percent change relative to initial cover.
+
+```{r}
+inverts_change_cov <- inverts %>%
+  mutate(change_in_cover = (change_in_cover / initial_cover)) #mutate to make new col looking at % change in cover
+inverts_change_cov
+
+inverts_glm_change_cov <- glm(change_in_cover ~ caged*position_on_block, 
+                              data = inverts_change_cov,
+                              family = gaussian(link="identity"))#create lm of our transformed data that looks at the interaction of caged and position on block's influence on %cover
+
+plot(inverts_glm_change_cov, which=1)  #residuals vs fitted values
+plot(inverts_glm_change_cov, which=2) #qq plot better than original but not great
+shapiro.test(residuals(inverts_glm_change_cov)) #test for normality and fail to reject null
+plot(inverts_glm_change_cov, which=4) #cooks distances vs row labels. cooks distance is way smaller
+```
+
+
+      Calculate difference in logit cover (so, logit(initial cover) - logit(final cover)). Logit transformations linearize percent cover data, and are often all that is needed to work percent cover into a linear model. You can use car::logit() for this.
+      
+```{r}
+inverts_change_logist <- inverts %>%
+  mutate(change_logit_cover = car::logit(initial_cover) - car::logit(final_cover)) #use logit transformation to linearize percent cover data
+
+inverts_glm_logit <- glm(change_logit_cover ~ caged*position_on_block, 
+                         data = inverts_change_logist,
+                         family = gaussian(link="identity")) #create lm of our transformed data that looks at the interaction of caged and position on block's influence on %cover
+
+plot(inverts_glm_logit, which=1)  #residuals vs fitted values is better
+plot(inverts_glm_logit, which=2) #qq plot is looking wonky
+shapiro.test(residuals(inverts_glm_logit)) #test for normality reject null
+plot(inverts_glm_logit, which=4) #cooks distances vs row labels. cooks looks smaller
+```
+
+
+      Try all three methods. Which one works so that you can produce valid inference?
+ 
+I would argue that dividing change by initial cover to express change as percent change relative to initial cover is the best b/c the plots look good and the shaprio test gives us a higher p-value. Incorporating the initial cover as a covariate is also a very good option. When we look at cooks distance it looks like there's one data point in particular that is impacting this from being the better option. It looks good other than the p-value on the shaprio test is lower. 
+
+2.4 Great! So, take us home! Using NHST with an alpha of 0.08 (why not), what does this fit model tell you about whether predation matters given how I have described the system? Feel free to replot the data or fit model results if helpful
+
+The Anova comparison (for both option 1 and 2) tells us that caged and position on block both impact the number of inverts.  
+
+```{r}
+#method 1
+Anova(inverts_glm_int) 
+
+#method 2
+Anova(inverts_glm_change_cov)
+```
+
+
+
+3. Comparing Means with Covariates
+We will wrap up with a model mixing continuous and discrete variables. In this dataset from Scantlebury et al, the authors explored how caste and mass affected the energy level of naked mole rats.
+
+3.1 OK, you know what you are about at this point. Load in the data, plot it, fit it, check assumptions. Use Bayes for this.
+```{r}
+setwd("/Users/wendiwhite/Desktop/Ecology/UMass Boston Masters/UMass Masters classes/bio stats 607/data")
+rats <- read_csv("/Users/wendiwhite/Desktop/Ecology/UMass Boston Masters/UMass Masters classes/bio stats 607/data/18e4MoleRatLayabouts.csv")
+summary(rats)
+
+ggplot(data= rats,#plot data of change in mass across energy and sort by caste
+       mapping = aes(x=lnenergy,
+                     y=lnmass,
+                     color=caste)) + 
+  geom_point(alpha=0.7) + #transparency of point
+  theme_bw(base_size=17) #size of text
+
+rat_brm <- brm(lnenergy~ lnmass + caste, #bayes model looking at the impacts of mass on energy while also considering caste
+               family = gaussian(link="identity"),
+               data=rats,
+               chain= 3)
+
+plot(rat_brm) #look at the bayes plot
+
+rhat(rat_brm)%>%
+  mcmc_rhat()#can see all values are close to 1
+
+pp_check(rat_brm, "dens_overlay") #green is posteriors from fit
+                #black is dist of length in bayes
+                #looks like a good fit!
+
+
+#checking our residuals
+pp_check(rat_brm, "error_hist") #residuals look good!
+pp_check(rat_brm, "error_scatter") #relationship 
+        #between residuals and obs values.. see that it's  
+        #generally linear so we're good!
+pp_check(rat_brm, "error_scatter_avg") #takes avg error
+          #over all posteriors
+
+#no auto correlation 
+mcmc_acf(rat_brm)
+```
+
+
+3.2 Examine whether there is an interaction or not using LOO cross-validation. Is a model with an interaction more predictive?
+
+There is no clear interaction of caste and mass b/c loo_compare shows that rat_brm is the better model.
+
+```{r}
+rat_brm_int <- brm(lnenergy~ caste* lnmass, #bayes model looking at the impacts of caste, mass and the interaction of both on energy
+               family = gaussian(link="identity"),
+               data=rats,
+               chain= 3)
+
+rat_brm_loo <- loo(rat_brm) #leave one out inference for the rat bayes model
+rat_brm_int_loo <- loo(rat_brm_int) #leave one out inference for the rat bayes model that includes the interaction
+
+loo_compare(rat_brm_loo, rat_brm_int_loo) #compare to see which model is correct
+
+#see that rat_brm is 0 which means we select this one. We don't pick model with interaction of caste and lnmass
+```
+
+
+3.3 Compare the two castes energy expenditure at the mean level of log mass. Are they different? How would you discuss your conclusions.
+
+Our 95% confidence intervals are very diff. Our lower worker CI and upper lazy do not overlap which tells us that there is a very diff energy expenditure between lazy and worker.
+
+```{r}
+emmeans(rat_brm, ~caste, method="tukey") #compare means of bayes model looking at energy expenditure between lazy and worker
+
+emmeans(rat_brm, ~caste) %>% #do it as a comparison between the two castes
+  contrast(method="tukey")
+```
+
+
+3.4 Plot the fit model. Use tidybayes and ggdist with your model to show fit and credible intervals with the raw data points on top. modelr::data.grid() might help as well.
+
+```{r}
+rat_brm <- brm(lnenergy~ lnmass + caste, #bayes model looking at the impacts of mass on energy while also considering caste
+               family = gaussian(link="identity"), #gaussian dist and identity for link
+               data=rats,
+               chain= 3)
+
+rat_newdat <- modelr::data_grid(rats, #do sequence of 100 over range of lnmass per each caste
+                                  caste = unique(caste),
+                                  lnmass= seq_range(lnmass, n=100))
+
+rat_predict <- predict(rat_brm, #look at the response and CI that we get from our bayes model  and add those predictions to the rat_newdat.
+                         newdata= rat_newdat,
+                         type= "response",
+                         interval= "confidence")
+
+rat_newdat <- rat_newdat %>%
+  mutate(lnenergy= rat_predict) #add a new column with the CI
+
+#find predictions of the data and create new data frame with the means
+rat_newfit <- emmeans(rat_brm, specs = ~caste +lnmass, #take the means of the data set across 100 of the mass data points
+                        at = list(lnmass = seq(4,5, length.out = 100))) %>%
+  as_tibble() %>%
+  mutate(lnenergy= emmean)
+
+
+ggplot(data= rats,#take origional graph of data looking at how mass changes energy for diff castes
+       aes(x = lnmass,
+           y = lnenergy,
+           color= caste)) +
+  geom_point() + #plot the origional data points
+  geom_ribbon(data= rat_newfit, #use geom ribbon to set the upper and lower CI
+              aes(ymin= lower.HPD, ymax= upper.HPD, group=caste),
+              alpha = 0.1, color = "lightgrey")+ #set CI as light grey and transparency of 0.1 
+  theme_classic()
+```
+
+
+
+
+
+
+
