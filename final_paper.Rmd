@@ -1,0 +1,393 @@
+---
+title: "Quantifying wrack deposits in the Plum Island Estuary"
+author: "Wendi White"
+date: "github: https://github.com/wendi-white/biol607_homework"
+output: word_document
+---
+
+### **Introduction**  
+Marshes are established as ecosystems of high productivity due to the vital functions they provide such as preventing shoreline erosion, sequestering atmospheric carbon, and providing a nursery for fish and crustaceans. Sea level rise (SLR) poses one of the greatest threats to marshes by outpacing the rate of salt marsh accretion, ultimately leading to salt marshes drowning (Gedan et al. 2009). SLR creates a squeeze in marsh area due to urban development. Furthermore, Donnelly and Bertness (2001) saw a shift in vegetation from *Spartina patens* and *Juncus gerardii*, to stunted *Spartina alterniflora* that coincides with rates of SLR.
+
+The National Science Foundation developed the Long-Term Ecological Research Program (LTER) in 1980 to develop and test ecological theory over long periods of time. LTERs work to understand the effects of climate change through long-term research and time-series observations (Ducklow et al. 2009). Denman (2003) notes the limitations of some of the models created, stating that the over complication of models doesn't necessarily lead to increased stability in their predictions.
+
+Macroalgae deposits on salt marshes (wrack) are known to have both inhibitory and facilitative effects (Watson et al. 2015). When large mats of wrack are deposited in the upper marsh they can smoother plants through shading and cause anoxic events if enrichment is too excessive (Olabarria et al. 2010). Additionally, wrack is known to break the culms of the dominant salt marsh plant *S. alterniflora* (Watson et al. 2015). Wrack can be a beneficial subsidy when it decays and releases phosphorous and nitrogen (Olabarria et al. 2010). 
+
+Many resources and long term data sets have been established to help understand the impacts sea level rise (SLR) will have on our marshes. However, one aspect that has been overlooked are the impacts of wrack subsidies with respect to SLR. Further research of wrack may help to determine the importance of including it into future LTER and models. Analysis of a current LTER data set will give us preliminary results to understand the prevalence of wrack. Wrack prevalence will be measured by:
+
+1. How does wrack cover change in relation to site and distance from the creek?
+2. Could bare ground be a result of wrack smoothing or ripping up plants from earlier in the season?
+
+
+### **Methods**
+The Plum Island Estuary LTER (PIE LTER) studies the long-term effects of changes in climate, land use and sea level. Our data set works with five sites simulating current, transition and future predictions of marshes impacted by SLR. The two current sites are Nelson and Clubhead, the transition site is Patmos South (PATS), and the two future sites are LM2 and Shad East. Sites were determined by their distance to upland boarder (marsh squeeze) and dominant plant species (transition from *S. patens* to *S. alterniflora*) in order to simulate the effects of SLR.
+
+Percent cover data is taken every summer between June-August. Percent cover is measured with four pre-established transects at each site with five quadrats spanning their length. Transects are laid from the creek edge toward the upland boarder. Quadrat one (low marsh) is always closest to the creek and five (high marsh) is the furthest. We will use quadrat number as a proxy for elevation in this analysis.
+
+
+### **Statistical Analysis** 
+Using similar methods as Guo and Pennings 2012, I will use a multiple linear regression (MLR) analysis using RStudio version 4.0.2. MLR was used so we can predict values based on two or more variables and the interaction between some of those variables. To start, linear models (LM) were fit and checked for normality using qq plots, a Shapiro test (<0.05), cooks distance, and a plot of our fitted vs residual values. Variance inflation factor (VIF) was also calculated to ensure our predictors aren't too correlated (<10). Then I used an F-test to see which variable(s) are influencing percent wrack and bare cover.
+
+The first LMs were set up to look at the effects of site, elevation (quadrat), transect and the interaction of site and elevation on percent cover of wrack, bare, and detritus. Site and elevation may have an interactive effect because we would expect for wrack to be more prevalent at high elevations and elevation may vary by site.
+
+Data was loaded, cleaned and combined using rbind. I separately plotted change in wrack, detritus and bare ground over time and grouped by site to visualize the data. One of the first things I noticed is that there might be a wrack pattern at Pats (our transition site) but both our percent bare and detritus didn't have any sites with obvious differences. In 2019 we have all five of our predictor sites observed so we will only use this year from here forward to prevent an unbalanced dataset. This means we will be analyzing the change in wrack and bare cover with relation to site and distance from the creek in 2019.
+
+The second part of this analysis was to use similar methods to determine if wrack was potentially causing an increase in bare percent cover. Late season sampling means that wrack may have ripped up plants before sampling and left bare space. Bare space can also be caused by a higher cover of plants where they shade part of the plot and prevent additional plant growth. Therefore, if we see low plant cover and high bare space it *could* mean that wrack is impacting the plots. LM were set up to look at how site, *S. patens* (spp), *S. alterniflora* (spa) and the interaction of the two plants influence bare space. Followed up with how spp, spa, wrack and the interaction those three have with elevation may influence bare cover. Finally looking at how wrack, elevation, the interaction of wrack and elevation, and site might be influencing each plant type. Since the plants grow at different elevations and at different sites due to the experimental set up, it was important to look at the two species separately rather than as combined plant cover. 
+
+```{r libraries, warning=FALSE, cache=TRUE, message= FALSE, tidy=TRUE, echo=FALSE}
+library(ggpubr)
+library(pwr)
+library(tidyr)
+library(dplyr)
+library(emmeans)
+library(reshape2)
+library(ggplot2)
+library(data.table)
+library(brms)
+library(bayesplot)
+library(car)
+library(tidyverse)
+library(knitr)
+library(broom)
+library(modelr)
+library(visreg)
+```
+
+```{r load in the data, warning=FALSE, cache=TRUE, message= FALSE, tidy=TRUE, echo=TRUE}
+#Load in the data.
+setwd("/Users/wendiwhite/Desktop/Ecology/UMass Boston Masters/UMass Masters classes/bio stats 607/final project/data")
+wrack_2018_i <- read.csv("quadrats_2018.csv", check.names = F) #remove the X that is subbed in for "%"
+wrack_2018_i <- janitor::clean_names(wrack_2018_i) #use janitor to clean all the col names up
+wrack_2019_i <- read.csv("Quadrats_2019.csv", check.names = F)#remove the X that is subbed in for "%"
+wrack_2019_i <- janitor::clean_names(wrack_2019_i) #use janitor to clean all the col names up
+wrack_2020_i <- read.csv("2020_PIE_Quadrat_Sampling.csv", check.names = F)#remove the X that is subbed in for "%"
+wrack_2020_i <- janitor::clean_names(wrack_2020_i) #use janitor to clean all the col names up
+```
+
+```{r head of datasets, warning=FALSE, cache=TRUE, results= 'hide', tidy=TRUE, echo=TRUE}
+#Look at head of all data sets to see if they have the same column names
+head(wrack_2018_i) #look at col names
+head(wrack_2019_i) #look at col names
+head(wrack_2020_i) #look at col names
+```
+
+```{r manipulate datasets, warning=FALSE, cache=TRUE, results= 'hide', tidy=TRUE, echo=FALSE, message=TRUE}
+#Seems that the data sets don't have the same column names and some inconsistency within the columns. When using rbind it is easiest if all the columns have identical names. To simplify the data I will also only select for site code, year, transect, quadrat, percent bare, percent detritus, percent wrack, spp, and spa from each dataset.
+wrack_2018 <- wrack_2018_i %>% #take 2018 data
+  select(c(site_code, year, transect, quadrat, percent_bare, percent_detritus, percent_wrack, spp, spa)) %>% #select for only certain columns
+  mutate(percent_wrack =as.double(percent_wrack)) %>% #make wrack, detritus and bare into double class (numeric)
+  mutate(percent_detritus =as.double(percent_detritus)) %>%
+  mutate(percent_bare =as.double(percent_bare)) %>%
+  mutate(year = 2018) %>% #make sure all values in 2018 are 2018 (there were some 18's)
+  mutate(year= as.character(year)) %>% #make year, transect and quadrat into characters
+  mutate(transect= as.character(transect)) %>%
+  mutate(quadrat= as.character(quadrat)) %>%
+  na.omit() #omit NA's
+wrack_2018
+
+wrack_2019  <- wrack_2019_i %>%#take 2019 data
+  select(c(site_code, year, transect, quadrat, percent_bare, percent_detritus, percent_wrack, spp, spa)) %>% #select for only certain columns 
+  mutate(year = 2019) %>% #make sure all values in 2019 are 2019 (one typo listed with date 2918)
+  mutate(percent_detritus =as.double(percent_detritus)) %>% #make wrack, detritus and bare into double class (numeric)
+  mutate(percent_wrack =as.double(percent_wrack)) %>%
+  mutate(percent_bare =as.double(percent_bare)) %>%
+  mutate(year= as.character(year)) %>% #make year, transect and quadrat into characters
+  mutate(transect= as.character(transect)) %>%
+  mutate(quadrat= as.character(quadrat)) %>%
+  na.omit() #omit NA's
+wrack_2019
+
+wrack_2020  <- wrack_2020_i %>% #take 2020 data
+  select(c(site_code, year, transect, quadrat, percent_bare, percent_detritus, percent_wrack, spp, spa)) %>% #select for only certain columns 
+  mutate(percent_detritus =as.double(percent_detritus)) %>% #make wrack, detritus and bare into double class (numeric)
+  mutate(percent_wrack =as.double(percent_wrack)) %>%
+  mutate(percent_bare =as.double(percent_bare)) %>%
+  mutate(year= as.character(year)) %>% #make year, transect and quadrat into characters
+  mutate(transect= as.character(transect)) %>%
+  mutate(quadrat= as.character(quadrat)) %>%
+  na.omit() #omit NA's
+wrack_2020 
+```
+
+```{r combine datasets, warning=FALSE, cache=TRUE, results= "hide", tidy=TRUE, echo=TRUE}
+#Now that everything is loaded with the same col names I can combine all the files into one large dataset.
+wrack <- rbind(wrack_2018, wrack_2019, wrack_2020) #bind all data sets together by col names (b/c they are all the same)
+wrack
+```
+
+```{r initial plot, warning=FALSE, cache=TRUE, results= "hide", tidy=TRUE, fig.show= "hide", echo=FALSE, message=TRUE}
+#After loading in our data, the first step is to look at it by separately plotting change in wrack, detritus and bare ground over time and grouping by site.
+ggplot(data = wrack, #graph the change in percent wrack over time and across diff sites
+       mapping = aes(x= year,
+                     y= percent_wrack,
+                     colour= site_code)) +
+  stat_summary(color="black", size=0.8) + #add dot to mark mean and SE 
+  geom_point() +
+  facet_wrap(~site_code)+ #break up graphs by site
+  labs(title = "Change in percent wrack over time", colour= "site", y= "percent wrack") + #add axis labels
+  theme(plot.title = element_text(face = "bold", size= (15), hjust = 0.5)) #center title and bold it
+
+ggplot(data = wrack, #graph the change in percent detritus over time and across diff sites
+       mapping = aes(x= year,
+                     y= percent_detritus,
+                     colour= site_code)) +
+  stat_summary(color="black", size=0.8) + #add dot to mark mean and SE 
+  geom_point() +
+  facet_wrap(~site_code) + #break up graphs by site
+  labs(title = "Change in percent detritus over time", colour= "site", y= "percent detritus") + #add axis labels
+  theme(plot.title = element_text(face = "bold", size= (15), hjust = 0.5)) #center title and bold it
+
+ggplot(data = wrack, #graph the change in percent bare over time and across diff sites
+       mapping = aes(x= year,
+                     y= percent_bare,
+                     colour= site_code)) + #add dot to mark mean and SE 
+  stat_summary(color="black", size=0.8) +
+  geom_point() +
+  facet_wrap(~site_code) + #break up graphs by site
+  labs(title = "Change in percent bare ground over time", colour= "site", y= "percent bare") + #add axis labels
+  theme(plot.title = element_text(face = "bold", size= (15), hjust = 0.5)) #center title and bold it
+```
+
+```{r 2019 initail graphs, warning=FALSE, cache=TRUE, message= TRUE, tidy=TRUE, results= "hide", echo=FALSE}
+ggplot(data = wrack_2019 %>%
+         mutate(site_code = factor(site_code, levels=c("NELSON","CLUBHEAD","PATS","SHAD EAST", "LM3"))), #graph the change in percent wrack over transects (elevation estimate) and across diff sites
+       mapping = aes(x= quadrat,
+                     y= percent_wrack,
+                     colour= site_code)) +
+  stat_summary(color="black", size=0.8) + #add dot to mark mean and SE 
+  geom_point() +
+  facet_wrap(~site_code) + #break up graphs by site
+  labs(title = "Percent cover of wrack as you move away from the creek", colour= "site", y= "Percent cover of wrack", x= "Quadrat number  (distance from creek)") + #add axis labels
+  theme(plot.title = element_text(face = "bold", size= (15), hjust = 0.5)) + #center title and bold it
+  scale_colour_discrete(labels = c("NELSON","CLUBHEAD","PATS","SHAD EAST", "LM3"))
+  
+ggplot(data = wrack_2019 %>%
+         mutate(site_code = factor(site_code, levels=c("NELSON","CLUBHEAD","PATS","SHAD EAST", "LM3"))), #graph the change in percent detritus over transects (elevation estimate) and across diff sites
+       mapping = aes(x= quadrat,
+                     y= percent_detritus,
+                     colour= site_code)) +
+  stat_summary(color="black", size=0.8) + #add dot to mark mean and SE 
+  geom_point() +
+  facet_wrap(~site_code) + #break up graphs by site
+  labs(title = "Percent cover of detritus as you move away from the creek", colour= "site", y= "Percent cover of detritus", x= "Quadrat number  (distance from creek)") + #add axis labels
+  theme(plot.title = element_text(face = "bold", size= (15), hjust = 0.5)) + #center title and bold it
+  scale_colour_discrete(labels = c("NELSON","CLUBHEAD","PATS","SHAD EAST", "LM3"))
+
+ggplot(data = wrack_2019%>%
+         mutate(site_code = factor(site_code, levels=c("NELSON","CLUBHEAD","PATS","SHAD EAST", "LM3"))), #graph the change in percent bare over transects (elevation estimate) and across diff sites
+       mapping = aes(x= quadrat,
+                     y= percent_bare,
+                     colour= site_code)) +
+  stat_summary(color="black", size=0.8) + #add dot to mark mean and SE 
+  geom_point() +
+  facet_wrap(~site_code)+ #break up graphs by site
+  labs(title = "Percent cover of bare space as you move away from the creek", colour= "site", y= "Percent cover of bare space", x= "Quadrat number  (distance from creek)") + #add axis labels
+  theme(plot.title = element_text(face = "bold", size= (15), hjust = 0.5)) + #center title and bold it
+  scale_colour_discrete(labels = c("NELSON","CLUBHEAD","PATS","SHAD EAST", "LM3"))
+
+```
+
+```{r lm and assumptions wrack, warning=FALSE, cache=TRUE, results= "hide", fig.show= "hide", tidy=TRUE, echo=TRUE}
+wrack_lm <- lm(percent_wrack ~ site_code*quadrat + transect,
+                 data= wrack_2019) #set up model so that there's an interaction of site, quadrat and site and quadrat on wrack while also considering transect number
+
+plot(wrack_lm, which=1)  #residuals vs fitted value. Seems like a poor fit
+plot(wrack_lm, which=2) #qq plot. The tails are super wonky!!
+shapiro.test(residuals(wrack_lm)) #test for normality. Reject null saying we have a normal distribution which means we don't have a good model
+plot(wrack_lm, which=4) #cooks distances vs row labels
+
+#well b/c it's a little wonky let's logit!
+percent_wrack_logit <- wrack_2019 %>%
+  mutate(log_percent_wrack= car::logit(percent_wrack))
+
+wrack_lm_log <- lm(log_percent_wrack ~ site_code*quadrat + transect,
+                 data= percent_wrack_logit) #set up model so that there's an interaction of site, quadrat and site and quadrat on wrack while also considering transect number 
+
+plot(wrack_lm_log, which=1)  #residuals vs fitted value. Seems like a better fit but not great
+plot(wrack_lm_log, which=2) #qq plot. The tails are still a bit wonky!!
+shapiro.test(residuals(wrack_lm_log)) #test for normality. Normally we would reject null saying we have a normal distribution which means we don't have a good model. BUT we can see that the model looks good other than the upper tail. When looking at the ggplots we can see this is due to PATS quadrat #5. It has far more wrack than the other sites and even more than the other quadrats. Seeing that everything else looks good, we will choose to use this model
+plot(wrack_lm_log, which=4) #cooks distances vs row labels. all values under 1 so we're okay
+
+#variance inflation factor. Need to make sure our predictors aren't too correlated
+vif(wrack_lm_log) #must be less than 10. Looks good won't center
+
+summary(wrack_lm_log) #~79% of variability in response variable associated with our predictors 
+
+#compare means by quadrats at different sites to see what is still showing non-linearity for LM 
+wrack_log_emmeans_2019 <- emmeans(wrack_lm_log, ~ quadrat|site_code)  
+
+wrack_cont <- contrast(wrack_log_emmeans_2019, method = "tukey", adjust = "none") #p-values smaller when we don't adjust
+
+plot(wrack_cont) + # see that at PATS there is one set of transects that is different. Looking at our graphs and Anova from earlier we would assume this is from our upper quadrats at Pats
+  geom_vline(xintercept = 0, color= "red")
+
+```
+
+```{r lm and assumptions detritus, warning=FALSE, cache=TRUE, results= "hide", fig.show= "hide", tidy=TRUE, echo=TRUE}
+det_lm <- lm(percent_detritus ~ site_code*quadrat + transect,
+                 data= wrack_2019) #set up model so that there's an interaction of site, quadrat and site and quadrat on detritus while also considering transect number 
+
+plot(det_lm, which=1)  #residuals vs fitted values
+plot(det_lm, which=2) #qq plot 
+shapiro.test(residuals(det_lm)) #test for normality 
+plot(det_lm, which=4) #cooks distances vs row labels. values under 1 so we are good
+
+#variance inflation factor. Need to make sure our predictors aren't too correlated
+vif(det_lm) #must be less than 10. Looks good won't center
+
+summary(det_lm) #~54% of variability in response variable associated with our predictors 
+```
+
+```{r lm and assumptions bare, warning=FALSE, cache=TRUE, results= "hide", fig.show= "hide", tidy=TRUE, echo=TRUE}
+bare_lm <- lm(percent_bare ~ site_code*quadrat + transect,
+                 data= wrack_2019) #set up model so that there's an interaction of site, quadrat and site and quadrat on bare ground while also considering transect number 
+
+plot(bare_lm, which=1)  #residuals vs fitted values. Looks good!
+plot(bare_lm, which=2) #qq plot. Seems to follow line pretty well
+shapiro.test(residuals(bare_lm)) #test for normality. We fail to reject the null so our model has a normal distribution
+plot(bare_lm, which=4) #cooks distances vs row labels. values  under 1 so we're good
+
+#variance inflation factor. Need to make sure our predictors aren't too correlated
+vif(bare_lm) #must be less than 10. Looks good won't center
+
+summary(bare_lm) #~44% of variability in response variable associated with our predictors 
+```
+
+```{r Analysis of variance for wrack cover, warning=FALSE, cache=TRUE, message= TRUE, tidy=TRUE, echo=FALSE}
+#Anova. Look at the variance between our predictor values set up in the linear models
+Anova(wrack_lm_log)
+
+summary(wrack_lm_log)
+```
+
+```{r, warning=FALSE, cache=TRUE, results= "hide", fig.show= "hide", tidy=TRUE, echo=TRUE}
+#So in another thought let's look at diff between low plant and high bare space-- could mean edaphic stress or wrack is impacting the plots. If high plant and high bare space then it's likely a shading effect from surrounding plants
+setwd("/Users/wendiwhite/Desktop/Ecology/UMass Boston Masters/UMass Masters classes/bio stats 607/final project/data")
+wrack_2019_i2 <- read.csv("Quadrats_2019.csv", check.names = F) #remove the X that is subbed in for "%"
+wrack_2019_i2 <- janitor::clean_names(wrack_2019)
+head(wrack_2019_i2)
+```
+
+```{r lm impacts of plants/wrack on bare space, warning=FALSE, cache=TRUE, results= "hide", fig.show= "hide", tidy=TRUE, echo=TRUE}
+percent_bare_and_plants_lm <- lm(percent_bare ~ spp*spa + site_code, #look at how site, spp, spa and the interaction of spp and spa impacts bare space
+                 data= wrack_2019)
+
+plot(percent_bare_and_plants_lm, which=1)  #residuals vs fitted values. Looks good!
+plot(percent_bare_and_plants_lm, which=2) #qq plot. Seems to follow line pretty well
+shapiro.test(residuals(percent_bare_and_plants_lm)) #test for normality. We fail to reject the null so our model has a normal distribution 
+plot(percent_bare_and_plants_lm, which=4) #cooks distances vs row labels. values  under 1 so we're good
+
+vif(percent_bare_and_plants_lm) #under 10
+
+#run f-test
+Anova(percent_bare_and_plants_lm) #we see that both spp and spa impact the bare space
+summary(percent_bare_and_plants_lm)
+
+percent_bare_and_plants_lm_two <- lm(percent_bare ~ (spp+spa+percent_wrack) * quadrat + site_code, #now let's see how wrack also get's factored into this model. Look at the differences and how they are impacted by quadrat b/c with the wrack data we saw variation in the wrack by quadrat
+                 data= wrack_2019)
+
+plot(percent_bare_and_plants_lm_two, which=1)  #residuals vs fitted values. Looks good!
+plot(percent_bare_and_plants_lm_two, which=2) #qq plot. Seems to follow line pretty well
+shapiro.test(residuals(percent_bare_and_plants_lm_two)) #test for normality. We fail to reject the null so our model has a normal distribution 
+plot(percent_bare_and_plants_lm_two, which=4) #cooks distances vs row labels. values  under 1 so we're good
+
+vif(percent_bare_and_plants_lm_two) #percent wrack isn't great but we are already expecting that. Won't center b/c wrack does vary by quadrat and site. 
+
+#run f-test
+Anova(percent_bare_and_plants_lm_two) #we see that spp, spa and wrack impact the bare space
+summary(percent_bare_and_plants_lm_two)
+coef(percent_bare_and_plants_lm_two) #if we look at our coefficients we find that percent wrack increases with percent bare space. BUT there's a neg correlation with plant species and bare space. This means that we do see a correlation and b/c we can assume bare space is likely caused by either shading from plants or shading from wrack we may attribute some of this bare space to increased wrack cover.
+```
+
+```{r LM for influence of wrack on plant species, warning=FALSE, cache=TRUE, results= "hide", fig.show= "hide", tidy=TRUE, echo=TRUE}
+percent_wrack_and_spp_lm <- lm(spp ~ percent_wrack * quadrat + site_code, #now let's see how wrack also get's factored into this model. Look at the differences and how they are impacted by quadrat b/c with the wrack data we saw variation in the wrack by quadrat
+                 data= wrack_2019)
+
+plot(percent_wrack_and_spp_lm, which=1) #looks little wonky
+plot(percent_wrack_and_spp_lm, which=2) #tail likely due to same variation issues with wrack previously. Most of the data falls on the line
+plot(percent_wrack_and_spp_lm, which=4) #under one looks good
+
+vif(percent_wrack_and_spp_lm)  #percent wrack isn't great but we are already expecting that. Won't center b/c wrack does vary by quadrat and site. 
+
+Anova(percent_wrack_and_spp_lm) #site influencing spp which we could expect
+summary(percent_wrack_and_spp_lm) #LM3 seems to have more bare space and maybe Shad East. Wrack in quadrat 2 also maybe has some influence on bare space 
+
+percent_wrack_and_spa_lm <- lm(spa ~ percent_wrack * quadrat + site_code, #now let's see how wrack also get's factored into this model. Look at the differences and how they are impacted by quadrat b/c with the wrack data we saw variation in the wrack by quadrat
+                 data= wrack_2019)
+
+plot(percent_wrack_and_spa_lm, which=1) #looks good
+plot(percent_wrack_and_spa_lm, which=2) #seems to follow line well
+shapiro.test(residuals(percent_wrack_and_spa_lm)) #passes Shapiro
+plot(percent_wrack_and_spa_lm, which=4) #distances under 1 
+
+vif(percent_wrack_and_spa_lm)  #percent wrack isn't great but we are already expecting that. Won't center b/c wrack does vary by quadrat and site. 
+
+Anova(percent_wrack_and_spa_lm) #maybe some influence by site
+summary(percent_wrack_and_spa_lm) ##LM3 seems to have more bare space and maybe Shad East. Wrack in quadrats 2 and 5 also maybe has some influence on bare space 
+```
+
+
+### **Results**
+To set up this analysis I used the knowledge of the system rather than evaluate the models using AIC. I feel confident in my assumptions that wrack is typically found higher up in the marsh and that we can have site variation in wrack, bare or detritus abundances due to differences in tidal inundation. For our LMs if normality wasn't met then data was logit transformed since we are analyzing percent cover data. This was only necessary for the percent cover of wrack. Even after a logit transformation the model wasn't perfect. I compared the means of elevation at different sites to see why the data wasn't normal. Due to Pats appearing different in the initial graph it seemed likely that it was causing non-linearity. Due to this I said that despite the Shapiro test saying our logit transformed model wasn't normal, I decided to go forward using the logit transformed LM. 
+
+Our analysis of variance for wrack cover showed that site, elevation, the interaction of the two and transect were all influencing wrack percent cover. The summary showed that quadrat 5 at Pats had significant wrack cover with quadrats 3 and 4 at Pats also showing a potential influence in wrack cover. We would expect this pattern as higher elevation can be attributed to the higher numbered quadrats.
+```{r Anova wrack cover, warning=FALSE, cache=TRUE, message= TRUE, tidy=TRUE, echo=FALSE}
+#Anova. Look at the variance between our predictor values set up in the linear models
+Anova(wrack_lm_log)
+summary(wrack_lm_log)
+```
+
+Our analysis of variance for bare cover showed that elevation was influencing bare percent cover. The summary showed that specifically quadrat 5 was influencing bare cover. This relationship could be due to wrack deposits being higher up or a shift in plant cover.
+```{r Anova bare cover, warning=FALSE, cache=TRUE, message= TRUE, tidy=TRUE, echo=FALSE}
+#Anova. Look at the variance between our predictor values set up in the linear models
+Anova(bare_lm)
+summary(bare_lm)
+coef(bare_lm)
+```
+
+Our analysis of variance shows that both spp and spa are influencing percent bare. If we look at our coefficients we can see that as spp and spa increase, our percent bare decreases. We would expect this to happen since plants will want to occupy as much space as possible in any given plot.
+```{r percent_bare ~ spp*spa + site_code, warning=FALSE, cache=TRUE, message= TRUE, tidy=TRUE, echo=FALSE}
+Anova(percent_bare_and_plants_lm) #we see that both spp and spa impact the bare space
+summary(percent_bare_and_plants_lm)
+coef(percent_bare_and_plants_lm)
+```
+
+TO understand if increased wrack could be influencing bare space we looked at how bare cover is influenced by both plant types, wrack and the interaction of quadrat on these three variables. We find that our plants, wrack, elevation and the interaction of spa and elevation influence bare cover. If we look at our coefficients there is a negative correlation with both plant species and bare space but a positive correlation with wrack. This means as bare space increases so does wrack, and as plant cover increases bare space decreases. So we may attribute bare space to increases in wrack cover but we'd have to look further into this.
+```{r lm(percent_bare ~ (spp+spa+percent_wrack)*quadrat, warning=FALSE, cache=TRUE, message= TRUE, tidy=TRUE, echo=FALSE}
+Anova(percent_bare_and_plants_lm_two) #we see that spp, spa and wrack impact the bare space
+summary(percent_bare_and_plants_lm_two)
+coef(percent_bare_and_plants_lm_two) #if we look at our coefficients we find that percent wrack increases with percent bare space. BUT there's a neg correlation with plant species and bare space. 
+```
+
+Finally, if wrack is causing an increase in bare space this is likely due to ripping up or shading of plants. So we want to see if wrack influences both our plant species. Our analysis of variance shows us that site influences our spp and cover at LM3 and Shad East. For LM3 and Shad East we see decreases in spp and increases in spa due to it being our future site (set up as spa dominant). However, the analysis of wrack on spa produces a slight influence of wrack on spa species. This has been cited in the literature before so it may not be all that surprising that wrack is ripping up the spa.
+```{r spp/spa ~ percent_wrack * quadrat + site_code, warning=FALSE, cache=TRUE, message= TRUE, tidy=TRUE, echo=FALSE}
+Anova(percent_wrack_and_spp_lm) #site influencing spp which we could expect
+summary(percent_wrack_and_spp_lm) #LM3 seems to have more bare space and maybe Shad East. Wrack in quadrat 2 also maybe has some influence on bare space 
+coef(percent_wrack_and_spp_lm)
+
+Anova(percent_wrack_and_spa_lm) #maybe some influence by site
+summary(percent_wrack_and_spa_lm) ##LM3 seems to have more bare space and maybe Shad East. Wrack in quadrats 2 and 5 also maybe has some influence on bare space 
+coef(percent_wrack_and_spa_lm)
+```
+
+
+### **Discussion**
+This analysis works as a proof of concept that wrack may be influencing the LTER sites that are established. This could depend on the location of our sites. Upon speaking to field experts, Pats increased wrack cover could be due to smaller marsh size with respect to distance from creek to upland border, higher wrack availability due to a more direct link to the Plum Island Sound from Sawyer Creek, or being the transition site it is being flooded more frequently than our current sites but not so much (compared to future sites) that more wrack is able to remain for longer periods of time (Michael Roy, personal observations).
+
+Due to sampling times of current LTER data, it would be important to alter the study design to better understand the impacts of wrack on marsh functioning. Since wrack is cited as being more impactful to *S. alterniflora* and we saw a slight influence in our models, we may see wrack having larger impacts on our future marsh sites that are *S. alterniflora* dominant (LM3 and Nelson).
+
+### **Literature Cited**
+Denman KL. 2003. Modeling planktonic ecosystems: parameterizing complexity. *Oceanography* 57: 429-52.
+
+Donnelly JP, Bertness MD. 2001. Rapid shoreward encroachment of salt marsh cordgrass in response to accelerated sea-level rise. *Proc. Natl. Acad. Sci*. 98:14218–23.
+
+Ducklow, H.W., Doney, S.C., Steinberg, D.K., 2009. Contributions of Long-Term Research and Time-Series Observations to Marine Ecology and Biogeochemistry. *Annual Review of Marine Science* 1, 279–302.
+
+Gedan, K.B., B.R. Sillman, and M.D. Bertness. 2009. Centuries of Human Driven Change in Salt Marsh Ecosystems. *Annu. Rev. Marine Sci.* 1: 117-141.
+
+Guo, H., Pennings, S.C., 2012. Mechanisms mediating plant distributions across estuarine landscapes in a low-latitude tidal estuary. *Ecology* 93, 90–100.
+
+Olabarria, C., Incera, M., Garrido, J., Rossi, F., 2010. The effect of wrack composition and diversity on macrofaunal assemblages in intertidal marine sediments. *Journal of Experimental Marine Biology and Ecology* 396, 18–26.
+
+Watson, E., Wigand, C., Oczkowski, A., Sundberg, K., Vendettuoli, D., Jayaraman, S., Saliba, K., Morris, J., 2015. Ulva additions alter soil biogeochemistry and negatively impact Spartina alterniflora growth. *Marine Ecology Progress Series* 532, 59–72.
+
+
